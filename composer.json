@@ -1,0 +1,67 @@
+{
+    "name": "n5s/http-cli",
+    "description": "Serverless HTTP client - make requests to PHP scripts on the command line",
+    "license": "MIT",
+    "type": "library",
+    "keywords": [
+        "http",
+        "cli",
+        "command-line",
+        "testing",
+        "guzzle",
+        "symfony",
+        "http-client"
+    ],
+    "authors": [
+        {
+            "name": "Nicolas Lemoine",
+            "email": "nico@n5s.dev"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "symfony/http-foundation": "^7.3 || ^8.0",
+        "symfony/process": "^7.3 || ^8.0"
+    },
+    "require-dev": {
+        "ergebnis/composer-normalize": "^2.48",
+        "guzzlehttp/guzzle": "^7.10",
+        "phpstan/extension-installer": "^1.4",
+        "phpstan/phpstan": "^2.0",
+        "phpstan/phpstan-phpunit": "^2.0",
+        "phpunit/phpunit": "^11.0 || ^12.0",
+        "rector/rector": "^2.3",
+        "rmccue/requests": "^2.0",
+        "spatie/temporary-directory": "^2.3",
+        "symfony/http-client": "^7.3 || ^8.0",
+        "symplify/easy-coding-standard": "^13.0"
+    },
+    "suggest": {
+        "guzzlehttp/guzzle": "For Guzzle HTTP Client adapter integration",
+        "rmccue/requests": "For WordPress Requests library adapter integration",
+        "symfony/http-client": "For Symfony HTTP Client adapter integration"
+    },
+    "autoload": {
+        "psr-4": {
+            "n5s\\HttpCli\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "n5s\\HttpCli\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "ergebnis/composer-normalize": true,
+            "phpstan/extension-installer": true
+        },
+        "sort-packages": true
+    },
+    "scripts": {
+        "analyse": "phpstan analyse src/ --memory-limit=1G",
+        "cs": "ecs check",
+        "cs-fix": "ecs check --fix",
+        "test": "phpunit"
+    }
+}
