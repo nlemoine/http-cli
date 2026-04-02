@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/nlemoine/http-cli/compare/1.0.0...1.1.0) (2026-04-02)
+
+
+### Features
+
+* implement GlobalsHandler interface and InheritEnvGlobalsHandler for environment variable management ([af57507](https://github.com/nlemoine/http-cli/commit/af57507c48cdc6d63b5dd469ea28ae98fbb1c12f))
+
 ## 1.0.0 (2026-01-02)
 
 
