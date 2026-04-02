@@ -29,6 +29,7 @@ final class Client
     public function __construct(
         string $documentRoot,
         private readonly ?string $file = 'index.php',
+        private readonly ?GlobalsHandler $globalsHandler = null,
         private ?string $phpExecutable = null
     ) {
         $this->documentRoot = rtrim($documentRoot, '/\\');
@@ -162,7 +163,6 @@ final class Client
         try {
             $process->mustRun();
             $output = $process->getOutput();
-            // @phpstan-ignore catch.neverThrown (ProcessTimedOutException is thrown by Symfony Process on timeout)
         } catch (ProcessTimedOutException $e) {
             $output = $e->getProcess()->getOutput();
             $message = 'The process timed out';
@@ -195,13 +195,15 @@ final class Client
      */
     private function parseHeadersFromOutput(string $output): array
     {
-        // Look for our header marker at the end of output
-        $pattern = '/<!--HTTP_CLI_HEADERS:([A-Za-z0-9+\/=]+)-->$/';
+        // Look for the last header marker in output (plugins may append content after it)
+        $pattern = '/<!--HTTP_CLI_HEADERS:([A-Za-z0-9+\/=]+)-->/';
 
-        if (preg_match($pattern, $output, $matches)) {
+        if (preg_match_all($pattern, $output, $matches, PREG_SET_ORDER) && count($matches) > 0) {
+            $lastMatch = end($matches);
+
             try {
                 // Decode and unserialize header data
-                $serializedData = base64_decode($matches[1], true);
+                $serializedData = base64_decode($lastMatch[1], true);
                 if ($serializedData === false) {
                     throw new RuntimeException('Failed to decode header data');
                 }
@@ -212,12 +214,11 @@ final class Client
                     && isset($headerData['status'], $headerData['headers'])
                     && is_numeric($headerData['status'])
                 ) {
-                    // Remove header marker from content
-                    $cleanContent = preg_replace($pattern, '', $output, 1);
-
-                    if ($cleanContent === null) {
-                        throw new RuntimeException('Failed to remove header marker from output');
-                    }
+                    // Remove the header marker from output, preserving content before and after
+                    $markerPos = strrpos($output, $lastMatch[0]);
+                    $cleanContent = $markerPos !== false
+                        ? substr($output, 0, $markerPos) . substr($output, $markerPos + strlen($lastMatch[0]))
+                        : $output;
 
                     /** @var list<string> $headers */
                     $headers = array_values((array) $headerData['headers']);
@@ -298,6 +299,8 @@ final class Client
         }
 
         $globals['_REQUEST'] = array_merge(...$globals['_REQUEST']);
+
+        $this->globalsHandler?->handle($globals);
 
         return $globals;
     }

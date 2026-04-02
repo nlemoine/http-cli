@@ -716,6 +716,71 @@ class ClientTest extends AbstractHttpCliTestCase
         $this->assertStringEndsWith('/admin/dashboard.php', $data['SCRIPT_FILENAME']);
     }
 
+    public function testParentEnvVarsNotInheritedByDefault(): void
+    {
+        $testFile = $this->createTestFile('env_test', '<?php
+            echo json_encode([
+                "server" => $_SERVER["HTTP_CLI_TEST_VAR"] ?? null,
+            ]);
+        ?>');
+        $client = new Client(documentRoot: $this->testDocumentRoot, file: $testFile);
+
+        $previousServer = $_SERVER['HTTP_CLI_TEST_VAR'] ?? null;
+        $_SERVER['HTTP_CLI_TEST_VAR'] = 'test_value_123';
+
+        try {
+            $response = $client->request('GET', 'http://localhost/env_test.php');
+            $data = json_decode($response->getContent(), true);
+
+            $this->assertNull($data['server'], '$_SERVER should not contain parent env var without InheritEnvGlobalsHandler');
+        } finally {
+            if ($previousServer === null) {
+                unset($_SERVER['HTTP_CLI_TEST_VAR']);
+            } else {
+                $_SERVER['HTTP_CLI_TEST_VAR'] = $previousServer;
+            }
+        }
+    }
+
+    public function testParentEnvVarsInheritedWithHandler(): void
+    {
+        $testFile = $this->createTestFile('env_test_inherit', '<?php
+            echo json_encode([
+                "server" => $_SERVER["HTTP_CLI_TEST_VAR"] ?? null,
+                "getenv" => getenv("HTTP_CLI_TEST_VAR") ?: null,
+            ]);
+        ?>');
+        $client = new Client(
+            documentRoot: $this->testDocumentRoot,
+            file: $testFile,
+            globalsHandler: new \n5s\HttpCli\InheritEnvGlobalsHandler(),
+        );
+
+        $previousValue = getenv('HTTP_CLI_TEST_VAR');
+        $previousServer = $_SERVER['HTTP_CLI_TEST_VAR'] ?? null;
+        putenv('HTTP_CLI_TEST_VAR=test_value_123');
+        $_SERVER['HTTP_CLI_TEST_VAR'] = 'test_value_123';
+
+        try {
+            $response = $client->request('GET', 'http://localhost/env_test_inherit.php');
+            $data = json_decode($response->getContent(), true);
+
+            $this->assertEquals('test_value_123', $data['server'], '$_SERVER should contain inherited env var');
+            $this->assertEquals('test_value_123', $data['getenv'], 'getenv() should return inherited env var');
+        } finally {
+            if ($previousValue === false) {
+                putenv('HTTP_CLI_TEST_VAR');
+            } else {
+                putenv("HTTP_CLI_TEST_VAR={$previousValue}");
+            }
+            if ($previousServer === null) {
+                unset($_SERVER['HTTP_CLI_TEST_VAR']);
+            } else {
+                $_SERVER['HTTP_CLI_TEST_VAR'] = $previousServer;
+            }
+        }
+    }
+
     public function testPhpSapiNameReturnsCgiFcgi(): void
     {
         $testFile = $this->createTestFile('sapi_name', '<?php

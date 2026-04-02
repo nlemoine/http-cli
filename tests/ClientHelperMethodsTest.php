@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace n5s\HttpCli\Tests;
 
 use n5s\HttpCli\Client;
+use n5s\HttpCli\GlobalsHandler;
 use ReflectionClass;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -379,6 +380,88 @@ class ClientHelperMethodsTest extends AbstractHttpCliTestCase
             'user_id' => 123,
             'role' => 'admin',
         ], $session);
+    }
+
+    public function testParseHeadersFromOutputWithTrailingContent(): void
+    {
+        $reflection = new ReflectionClass($this->client);
+        $method = $reflection->getMethod('parseHeadersFromOutput');
+
+        $headerData = [
+            'status' => 404,
+            'headers' => ['Content-Type: text/html'],
+        ];
+        $serializedData = base64_encode(serialize($headerData));
+        // Simulate a plugin (e.g. Query Monitor) appending HTML after the marker
+        $output = "Page content<!--HTTP_CLI_HEADERS:{$serializedData}--><div class=\"plugin-output\">Debug info</div>";
+
+        $result = $method->invoke($this->client, $output);
+
+        [$statusCode, $headers, $cleanContent, $session] = $result;
+
+        $this->assertEquals(404, $statusCode, 'Status code should be parsed even with trailing content after marker');
+        $this->assertEquals(['Content-Type: text/html'], $headers);
+        $this->assertStringNotContainsString('HTTP_CLI_HEADERS', $cleanContent);
+    }
+
+    // Test GlobalsHandler
+
+    public function testGlobalsHandlerModifiesGlobals(): void
+    {
+        $handler = new class implements GlobalsHandler {
+            public function handle(array &$globals): void
+            {
+                $globals['_SERVER']['MY_CUSTOM_VAR'] = 'test_value';
+                $globals['_ENV']['MY_CUSTOM_VAR'] = 'test_value';
+            }
+        };
+        $client = new Client($this->testDocumentRoot, 'index.php', $handler);
+
+        $reflection = new ReflectionClass($client);
+        $method = $reflection->getMethod('getGlobals');
+
+        $request = Request::create('http://localhost/test.php');
+        $globals = $method->invoke($client, $request);
+
+        $this->assertEquals('test_value', $globals['_SERVER']['MY_CUSTOM_VAR']);
+        $this->assertEquals('test_value', $globals['_ENV']['MY_CUSTOM_VAR']);
+    }
+
+    public function testGlobalsHandlerInChildProcess(): void
+    {
+        $this->createTestFile('globals_handler', '<?php
+            echo json_encode([
+                "server" => $_SERVER["MY_CUSTOM_VAR"] ?? null,
+            ]);
+        ?>');
+
+        $handler = new class implements GlobalsHandler {
+            public function handle(array &$globals): void
+            {
+                $globals['_SERVER']['MY_CUSTOM_VAR'] = 'test_value';
+            }
+        };
+        $client = new Client($this->testDocumentRoot, 'globals_handler.php', $handler);
+
+        $response = $client->request('GET', 'http://localhost/globals_handler.php');
+        $data = json_decode($response->getContent(), true);
+
+        $this->assertEquals('test_value', $data['server']);
+    }
+
+    public function testNullGlobalsHandlerIsNoOp(): void
+    {
+        $client = new Client($this->testDocumentRoot, 'index.php', null);
+
+        $reflection = new ReflectionClass($client);
+        $method = $reflection->getMethod('getGlobals');
+
+        $request = Request::create('http://localhost/test.php');
+        $globals = $method->invoke($client, $request);
+
+        // Should still produce valid globals without a handler
+        $this->assertArrayHasKey('_SERVER', $globals);
+        $this->assertArrayHasKey('_ENV', $globals);
     }
 
     // Test custom PHP executable
