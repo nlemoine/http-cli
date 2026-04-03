@@ -166,8 +166,40 @@ $response->getProcess();     // Symfony Process instance (for debugging)
 $client = new Client(
     documentRoot: '/path/to/your/app',   // Required: your app's root directory
     file: 'index.php',                   // Entry point (default: index.php)
+    globalsHandler: null,                // GlobalsHandler to customize superglobals
     phpExecutable: null,                 // PHP binary path (auto-detected)
 );
+```
+
+### Globals Handler
+
+By default, the child PHP process receives a clean set of superglobals built from the HTTP request only. If your application depends on environment variables from the parent process (e.g. `APP_ENV`, `DATABASE_URL`), you can use the built-in `InheritEnvGlobalsHandler`:
+
+```php
+use n5s\HttpCli\Client;
+use n5s\HttpCli\InheritEnvGlobalsHandler;
+
+$client = new Client(
+    documentRoot: '/path/to/your/app',
+    globalsHandler: new InheritEnvGlobalsHandler(),
+);
+```
+
+This merges the parent's `$_SERVER` and `$_ENV` into the child process. Request-specific variables take precedence over inherited ones.
+
+You can also implement the `GlobalsHandler` interface to customize superglobals however you need:
+
+```php
+use n5s\HttpCli\GlobalsHandler;
+
+final class MyGlobalsHandler implements GlobalsHandler
+{
+    public function handle(array &$globals): void
+    {
+        $globals['_SERVER']['APP_ENV'] = 'testing';
+        $globals['_ENV']['CUSTOM_VAR'] = 'value';
+    }
+}
 ```
 
 ## Adapter Options Support
