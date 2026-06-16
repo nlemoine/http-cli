@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.1](https://github.com/nlemoine/http-cli/compare/1.1.0...1.1.1) (2026-06-16)
+
+
+### Bug Fixes
+
+* ignore Symfony HTTP Client 8.1 max_connect_duration option ([23bdd22](https://github.com/nlemoine/http-cli/commit/23bdd22a2efb0e82d2e44fccf6d692405215fc54))
+* throw a clear error when no executable file can be resolved ([80fc09a](https://github.com/nlemoine/http-cli/commit/80fc09ae06927ce7d140634a25031ac10af65795))
+
 ## [1.1.0](https://github.com/nlemoine/http-cli/compare/1.0.0...1.1.0) (2026-04-02)
 
 
