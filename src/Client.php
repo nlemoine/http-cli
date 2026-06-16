@@ -54,6 +54,10 @@ final class Client
             $fileToExecute = $this->file;
         }
 
+        if ($fileToExecute === null) {
+            throw new RuntimeException('No file to execute: the client was constructed with a null $file and the URL does not point to a .php file.');
+        }
+
         $process = new Process(
             command: [
                 $this->getPhpExecutable(),
