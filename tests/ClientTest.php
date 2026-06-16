@@ -7,6 +7,7 @@ namespace n5s\HttpCli\Tests;
 use Exception;
 use InvalidArgumentException;
 use n5s\HttpCli\Client;
+use n5s\HttpCli\InheritEnvGlobalsHandler;
 use n5s\HttpCli\RequestOptions;
 use n5s\HttpCli\Response;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -753,7 +754,7 @@ class ClientTest extends AbstractHttpCliTestCase
         $client = new Client(
             documentRoot: $this->testDocumentRoot,
             file: $testFile,
-            globalsHandler: new \n5s\HttpCli\InheritEnvGlobalsHandler(),
+            globalsHandler: new InheritEnvGlobalsHandler(),
         );
 
         $previousValue = getenv('HTTP_CLI_TEST_VAR');

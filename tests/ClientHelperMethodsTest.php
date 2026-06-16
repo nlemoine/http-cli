@@ -408,7 +408,7 @@ class ClientHelperMethodsTest extends AbstractHttpCliTestCase
 
     public function testGlobalsHandlerModifiesGlobals(): void
     {
-        $handler = new class implements GlobalsHandler {
+        $handler = new class() implements GlobalsHandler {
             public function handle(array &$globals): void
             {
                 $globals['_SERVER']['MY_CUSTOM_VAR'] = 'test_value';
@@ -435,7 +435,7 @@ class ClientHelperMethodsTest extends AbstractHttpCliTestCase
             ]);
         ?>');
 
-        $handler = new class implements GlobalsHandler {
+        $handler = new class() implements GlobalsHandler {
             public function handle(array &$globals): void
             {
                 $globals['_SERVER']['MY_CUSTOM_VAR'] = 'test_value';
