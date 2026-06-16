@@ -55,6 +55,7 @@ final class SymfonyToRequestOptionsAdapter implements OptionsAdapterInterface
         'resolve' => false, // Ignored - DNS resolution not controllable
         'no_proxy' => false, // Ignored - use proxy option instead
         'max_duration' => false, // Ignored - use timeout instead
+        'max_connect_duration' => false, // Ignored - no network connection (Symfony 8.1+)
         'bindto' => false, // Ignored - not applicable in CLI context
         'capath' => false, // Ignored - use cafile instead
         'local_cert' => false, // Not implemented yet
