@@ -1,0 +1,17 @@
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    uses: nlemoine/.github/.github/workflows/release-please.yml@f0bc978711a8fd8c7a2ea4ff1eed581b5eb4df8b
