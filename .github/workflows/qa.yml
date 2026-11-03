@@ -17,4 +17,5 @@ jobs:
     uses: nlemoine/.github/.github/workflows/php-qa.yml@5a92d19b83b7b98b52e7a9b3b1ae2402c5635463
     with:
       cs-tool: ecs
-    secrets: inherit
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
