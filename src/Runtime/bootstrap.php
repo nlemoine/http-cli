@@ -9,9 +9,16 @@ use n5s\HttpCli\Runtime\SessionHandler;
 /**
  * This file executes before target file to set up global variables such as $_SERVER['DOCUMENT_ROOT']
  */
-(function (array $httpCliClientVars): void {
-    if (empty($httpCliClientVars)) {
+(function (array $payload): void {
+    $httpCliClientVars = $payload['globals'] ?? null;
+    $metadataFile = $payload['metadataFile'] ?? null;
+
+    if (! is_array($httpCliClientVars) || $httpCliClientVars === []) {
         throw new Exception('No globals data received via STDIN');
+    }
+
+    if (! is_string($metadataFile) || $metadataFile === '') {
+        throw new Exception('No metadata file received via STDIN');
     }
 
     // Set up php://input stream wrapper before setting globals
@@ -38,25 +45,23 @@ use n5s\HttpCli\Runtime\SessionHandler;
     require_once __DIR__ . '/SessionHandler.php';
     session_set_save_handler(new SessionHandler($initialSession), false);
 
-    // Simple header capture at script end - no buffering conflicts
-    register_shutdown_function(function () use ($headerManager): void {
+    // Hand the status, headers and session back to the client at script end, through the metadata file rather than
+    // the output, so that nothing the script prints can change them
+    register_shutdown_function(function () use ($headerManager, $metadataFile): void {
         // Capture final session state
         $sessionData = [];
         if (session_status() === PHP_SESSION_ACTIVE) {
             $sessionData = $_SESSION ?? [];
         }
 
-        // Create header data for parsing
-        $headerData = [
+        $metadata = [
             'status' => $headerManager->http_response_code(),
             'headers' => $headerManager->headers_list(),
             'session' => $sessionData,
-            'version' => '1.0',
         ];
 
-        // Output parseable header marker after all content
-        $marker = '<!--HTTP_CLI_HEADERS:' . base64_encode(serialize($headerData)) . '-->';
-        echo $marker;
+        // Silenced: a warning would end up in the response body. The client falls back to defaults if the file is empty.
+        @file_put_contents($metadataFile, serialize($metadata));
     });
 
     // Hook into error handling for better error responses
@@ -65,7 +70,7 @@ use n5s\HttpCli\Runtime\SessionHandler;
         $headerManager->http_response_code(500);
         $headerManager->header('Content-Type: text/plain');
 
-        // Output error details (header marker will be added by shutdown function)
+        // Output error details (the shutdown function hands the status and headers back to the client)
         echo sprintf(
             "Uncaught %s: %s in %s on line %d\n",
             $exception::class,
@@ -102,7 +107,8 @@ use n5s\HttpCli\Runtime\SessionHandler;
             throw new Exception('No data received via STDIN');
         }
 
-        // Unserialize the data with error handling
+        // Unserialize the data with error handling. All classes are allowed on purpose: the payload comes from the
+        // calling process, and objects in the session have to be restored
         // Note: unserialize() doesn't throw exceptions, it returns false and emits warnings
         set_error_handler(function ($severity, $message, $file, $line): void {
             throw new ErrorException($message, 0, $severity, $file, $line);

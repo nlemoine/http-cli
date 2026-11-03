@@ -6,6 +6,7 @@ namespace n5s\HttpCli;
 
 use Exception;
 use RuntimeException;
+use stdClass;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Process\Exception\ProcessFailedException;
@@ -160,39 +161,52 @@ final class Client
 
         $globals = $this->getGlobals($request, $options->session);
 
-        // Serialize globals data for STDIN transmission
-        try {
-            $process->setInput(serialize($globals));
-        } catch (Exception $e) {
-            throw new RuntimeException('Failed to serialize globals data: ' . $e->getMessage(), 0, $e);
-        }
+        // The status, headers and session come back through this file rather than the output, so that nothing the
+        // script prints can change them. tempnam() creates it readable by the current user only.
+        $metadataFile = tempnam(sys_get_temp_dir(), 'http_cli_metadata_');
 
-        if ($options->timeout !== null) {
-            $process->setTimeout($options->timeout);
+        if ($metadataFile === false) {
+            throw new RuntimeException('Failed to create the temporary file for the response metadata');
         }
 
         try {
-            $process->mustRun();
-            $output = $process->getOutput();
-        } catch (ProcessTimedOutException $e) {
-            $output = $e->getProcess()->getOutput();
-            $message = 'The process timed out';
-            if ($e->isIdleTimeout()) {
-                $message = 'The process timed out while idle';
+            // Serialize globals data for STDIN transmission
+            try {
+                $process->setInput(serialize([
+                    'globals' => $globals,
+                    'metadataFile' => $metadataFile,
+                ]));
+            } catch (Exception $e) {
+                throw new RuntimeException('Failed to serialize globals data: ' . $e->getMessage(), 0, $e);
             }
 
-            throw new Exception($message);
-        } catch (ProcessFailedException $e) {
-            $output = $e->getProcess()->getOutput();
-        }
+            if ($options->timeout !== null) {
+                $process->setTimeout($options->timeout);
+            }
 
-        // Extract headers from output and clean content
-        [$statusCode, $headers, $cleanContent, $session] = $this->parseHeadersFromOutput($output);
+            try {
+                $process->mustRun();
+                $output = $process->getOutput();
+            } catch (ProcessTimedOutException $e) {
+                $message = 'The process timed out';
+                if ($e->isIdleTimeout()) {
+                    $message = 'The process timed out while idle';
+                }
+
+                throw new Exception($message);
+            } catch (ProcessFailedException $e) {
+                $output = $e->getProcess()->getOutput();
+            }
+
+            [$statusCode, $headers, $session] = $this->readMetadata($metadataFile);
+        } finally {
+            @unlink($metadataFile);
+        }
 
         return new Response(
             statusCode: $statusCode,
             headers: $headers,
-            content: $cleanContent,
+            content: $output,
             process: $process,
             session: $session
         );
@@ -284,57 +298,46 @@ final class Client
     }
 
     /**
-     * Parse header marker from output and extract headers, status, session, and clean content.
+     * Read the status, headers and session that the child process wrote to the metadata file.
      *
-     * @param string $output The raw output from the PHP process
-     * @return array{int, list<string>, string, array<string, mixed>} [statusCode, headers, cleanContent, session]
+     * Objects other than stdClass, which has no methods, are not instantiated in the calling process: they come back as
+     * __PHP_Incomplete_Class, which serializes back to the original object when the session is passed to the next
+     * request.
+     *
+     * @return array{int, list<string>, array<string, mixed>} [statusCode, headers, session]
      */
-    private function parseHeadersFromOutput(string $output): array
+    private function readMetadata(string $metadataFile): array
     {
-        // Look for the last header marker in output (plugins may append content after it)
-        $pattern = '/<!--HTTP_CLI_HEADERS:([A-Za-z0-9+\/=]+)-->/';
+        $defaults = [200, [], []];
 
-        if (preg_match_all($pattern, $output, $matches, PREG_SET_ORDER) && count($matches) > 0) {
-            $lastMatch = end($matches);
+        $serializedMetadata = @file_get_contents($metadataFile);
 
-            try {
-                // Decode and unserialize header data
-                $serializedData = base64_decode($lastMatch[1], true);
-                if ($serializedData === false) {
-                    throw new RuntimeException('Failed to decode header data');
-                }
-                $headerData = @unserialize($serializedData);
-
-                if (
-                    is_array($headerData)
-                    && isset($headerData['status'], $headerData['headers'])
-                    && is_numeric($headerData['status'])
-                ) {
-                    // Remove the header marker from output, preserving content before and after
-                    $markerPos = strrpos($output, $lastMatch[0]);
-                    $cleanContent = $markerPos !== false
-                        ? substr($output, 0, $markerPos) . substr($output, $markerPos + strlen($lastMatch[0]))
-                        : $output;
-
-                    /** @var list<string> $headers */
-                    $headers = array_values((array) $headerData['headers']);
-                    /** @var array<string, mixed> $session */
-                    $session = (array) ($headerData['session'] ?? []);
-
-                    return [
-                        (int) $headerData['status'],
-                        $headers,
-                        $cleanContent,
-                        $session,
-                    ];
-                }
-            } catch (Exception) {
-                // If parsing fails, fall through to defaults
-            }
+        if ($serializedMetadata === false || $serializedMetadata === '') {
+            // The process ended before its shutdown functions could run
+            return $defaults;
         }
 
-        // No headers found or parsing failed - return defaults
-        return [200, [], $output, []];
+        $metadata = @unserialize($serializedMetadata, [
+            'allowed_classes' => [stdClass::class],
+        ]);
+
+        if (
+            ! is_array($metadata)
+            || ! isset($metadata['status'], $metadata['headers'])
+            || ! is_int($metadata['status'])
+            || ! is_array($metadata['headers'])
+        ) {
+            return $defaults;
+        }
+
+        /** @var array<string, mixed> $session */
+        $session = is_array($metadata['session'] ?? null) ? $metadata['session'] : [];
+
+        return [
+            $metadata['status'],
+            array_values(array_filter($metadata['headers'], is_string(...))),
+            $session,
+        ];
     }
 
     /**
