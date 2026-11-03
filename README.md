@@ -185,7 +185,7 @@ $client = new Client(
 );
 ```
 
-This merges the parent's `$_SERVER` and `$_ENV` into the child process. Request-specific variables take precedence over inherited ones.
+This merges the parent's `$_SERVER` and `$_ENV` into the child process. Request-specific variables take precedence over inherited ones. Variables that describe a request, such as `HTTP_*`, `PHP_AUTH_*`, `HTTPS` or `REMOTE_ADDR`, are never inherited: when the parent process is itself handling a request, under PHP-FPM for example, its headers and credentials don't reach the script.
 
 You can also implement the `GlobalsHandler` interface to customize superglobals however you need:
 
