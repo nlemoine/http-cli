@@ -79,6 +79,34 @@ final class Client
             cwd: $this->documentRoot,
         );
 
+        // Removed once the request is over, whatever happens
+        $temporaryFiles = [];
+
+        try {
+            return $this->run($process, $method, $url, $options, $scriptName, $scriptFilename, $temporaryFiles);
+        } finally {
+            foreach ($temporaryFiles as $temporaryFile) {
+                // Silenced: the script may have moved or deleted it
+                @unlink($temporaryFile);
+            }
+        }
+    }
+
+    /**
+     * Build the request for the script, run it and read its response.
+     *
+     * @param list<string> $temporaryFiles Receives the temporary files created for the request, which the caller removes
+     * @param-out list<string> $temporaryFiles
+     */
+    private function run(
+        Process $process,
+        string $method,
+        string $url,
+        RequestOptions $options,
+        string $scriptName,
+        string $scriptFilename,
+        array &$temporaryFiles,
+    ): Response {
         // Prepare request parameters and content based on body options
         $parameters = [];
         $content = null;
@@ -98,7 +126,7 @@ final class Client
             $content = $options->body;
         } elseif (! empty($options->multipart)) {
             // Multipart form data - files go to $_FILES, fields to $_POST
-            [$uploadedFiles, $postFields] = $this->processMultipart($options->multipart);
+            [$uploadedFiles, $postFields] = $this->processMultipart($options->multipart, $temporaryFiles);
             $parameters = $postFields;
             $contentType = 'multipart/form-data';
         }
@@ -170,39 +198,37 @@ final class Client
             throw new RuntimeException('Failed to create the temporary file for the response metadata');
         }
 
+        $temporaryFiles[] = $metadataFile;
+
+        // Serialize globals data for STDIN transmission
         try {
-            // Serialize globals data for STDIN transmission
-            try {
-                $process->setInput(serialize([
-                    'globals' => $globals,
-                    'metadataFile' => $metadataFile,
-                ]));
-            } catch (Exception $e) {
-                throw new RuntimeException('Failed to serialize globals data: ' . $e->getMessage(), 0, $e);
-            }
-
-            if ($options->timeout !== null) {
-                $process->setTimeout($options->timeout);
-            }
-
-            try {
-                $process->mustRun();
-                $output = $process->getOutput();
-            } catch (ProcessTimedOutException $e) {
-                $message = 'The process timed out';
-                if ($e->isIdleTimeout()) {
-                    $message = 'The process timed out while idle';
-                }
-
-                throw new Exception($message);
-            } catch (ProcessFailedException $e) {
-                $output = $e->getProcess()->getOutput();
-            }
-
-            [$statusCode, $headers, $session] = $this->readMetadata($metadataFile);
-        } finally {
-            @unlink($metadataFile);
+            $process->setInput(serialize([
+                'globals' => $globals,
+                'metadataFile' => $metadataFile,
+            ]));
+        } catch (Exception $e) {
+            throw new RuntimeException('Failed to serialize globals data: ' . $e->getMessage(), 0, $e);
         }
+
+        if ($options->timeout !== null) {
+            $process->setTimeout($options->timeout);
+        }
+
+        try {
+            $process->mustRun();
+            $output = $process->getOutput();
+        } catch (ProcessTimedOutException $e) {
+            $message = 'The process timed out';
+            if ($e->isIdleTimeout()) {
+                $message = 'The process timed out while idle';
+            }
+
+            throw new Exception($message);
+        } catch (ProcessFailedException $e) {
+            $output = $e->getProcess()->getOutput();
+        }
+
+        [$statusCode, $headers, $session] = $this->readMetadata($metadataFile);
 
         return new Response(
             statusCode: $statusCode,
@@ -412,9 +438,11 @@ final class Client
      * Parts without 'filename' are treated as regular form fields.
      *
      * @param list<array{name: string, contents: string, filename?: string, headers?: array<string, string>}> $parts
+     * @param list<string> $temporaryFiles Receives the temporary files written for the uploads, which the caller removes
+     * @param-out list<string> $temporaryFiles
      * @return array{array<string, UploadedFile>, array<string, string>} [files, fields]
      */
-    private function processMultipart(array $parts): array
+    private function processMultipart(array $parts, array &$temporaryFiles): array
     {
         $files = [];
         $fields = [];
@@ -430,6 +458,8 @@ final class Client
                     throw new RuntimeException('Failed to create temporary file for upload');
                 }
 
+                $temporaryFiles[] = $tmpFile;
+
                 file_put_contents($tmpFile, $part['contents']);
 
                 // Detect MIME type from headers or file contents
@@ -442,13 +472,6 @@ final class Client
                         $mimeType = $detectedType;
                     }
                 }
-
-                // Register cleanup for temp file
-                register_shutdown_function(static function () use ($tmpFile): void {
-                    if (file_exists($tmpFile)) {
-                        @unlink($tmpFile);
-                    }
-                });
 
                 $files[$name] = new UploadedFile(
                     path: $tmpFile,
