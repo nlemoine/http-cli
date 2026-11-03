@@ -97,6 +97,24 @@ final class ClientResponseMetadataTest extends AbstractHttpCliTestCase
         $this->assertSame('ArrayObject:1', $second->getContent());
     }
 
+    public function testScriptEndingWithoutHandingBackItsMetadataReturns500(): void
+    {
+        // A closure can't be serialized, so the shutdown function fails before writing the metadata
+        $this->createTestFile('unserializable_session', '<?php
+            session_start();
+            $_SESSION["callback"] = fn (): int => 1;
+            http_response_code(201);
+            header("X-Lost: yes");
+            echo "body";
+        ');
+
+        $response = (new Client($this->testDocumentRoot))->request('GET', 'http://localhost/unserializable_session.php');
+
+        $this->assertSame(500, $response->getStatusCode());
+        $this->assertSame([], $response->getHeaders());
+        $this->assertStringStartsWith('body', $response->getContent());
+    }
+
     public function testMetadataFileIsRemovedAfterTheRequest(): void
     {
         $this->createTestFile('index', '<?php echo "index";');

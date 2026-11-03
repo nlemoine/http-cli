@@ -335,12 +335,13 @@ final class Client
      */
     private function readMetadata(string $metadataFile): array
     {
-        $defaults = [200, [], []];
+        // Missing or invalid metadata means the script ended abnormally: don't let it look like a success
+        $defaults = [500, [], []];
 
         $serializedMetadata = @file_get_contents($metadataFile);
 
         if ($serializedMetadata === false || $serializedMetadata === '') {
-            // The process ended before its shutdown functions could run
+            // The process ended before its shutdown function could write them, or that function failed
             return $defaults;
         }
 
