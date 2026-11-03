@@ -113,7 +113,8 @@ final class Client
                 'SCRIPT_FILENAME' => $scriptFilename,
                 'PHP_SELF' => $scriptName,
             ],
-            content: $content
+            // Never null: Request::getContent() would then read the php://input of the calling process
+            content: $content ?? ''
         );
 
         // Add uploaded files from multipart data
