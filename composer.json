@@ -18,6 +18,10 @@
             "email": "nico@n5s.dev"
         }
     ],
+    "support": {
+        "issues": "https://github.com/nlemoine/http-cli/issues",
+        "source": "https://github.com/nlemoine/http-cli"
+    },
     "require": {
         "php": "^8.2",
         "symfony/http-foundation": "^7.4 || ^8.0",
