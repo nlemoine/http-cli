@@ -20,7 +20,8 @@
     ],
     "support": {
         "issues": "https://github.com/nlemoine/http-cli/issues",
-        "source": "https://github.com/nlemoine/http-cli"
+        "source": "https://github.com/nlemoine/http-cli",
+        "security": "https://github.com/nlemoine/http-cli/security/policy"
     },
     "require": {
         "php": "^8.2",
