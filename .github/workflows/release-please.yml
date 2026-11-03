@@ -4,9 +4,7 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 concurrency:
   group: release-please-${{ github.ref }}
@@ -14,4 +12,7 @@ concurrency:
 
 jobs:
   release-please:
+    permissions:
+      contents: write # create release commits, tags and GitHub releases
+      pull-requests: write # open and update the release PR
     uses: nlemoine/.github/.github/workflows/release-please.yml@f0bc978711a8fd8c7a2ea4ff1eed581b5eb4df8b
