@@ -165,7 +165,7 @@ $response->getProcess();     // Symfony Process instance (for debugging)
 ```php
 $client = new Client(
     documentRoot: '/path/to/your/app',   // Required: your app's root directory
-    file: 'index.php',                   // Entry point (default: index.php)
+    file: 'index.php',                   // Entry point inside documentRoot (default: index.php)
     globalsHandler: null,                // GlobalsHandler to customize superglobals
     phpExecutable: null,                 // PHP binary path (auto-detected)
 );
@@ -295,6 +295,7 @@ Running PHP scripts via CLI instead of a web server comes with inherent limitati
 
 ### Behavioral Differences
 
+- **Script resolution**: A URL path ending in `.php` runs that file from the document root, and any other path runs `file`. The script must be a file inside the document root, symbolic links included. Otherwise, or if it doesn't exist, the client returns a `404` without starting PHP, and `getProcess()` returns a process that was never started.
 - **Performance**: Process spawning overhead, but no DNS resolution, TCP/SSL handshake, or network latency
 - **`$_SERVER` values**: Some values like `SERVER_SOFTWARE` will differ from Apache/nginx
 - **File uploads**: Multipart parts are written to temp files and populated in `$_FILES`

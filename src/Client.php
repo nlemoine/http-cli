@@ -44,26 +44,36 @@ final class Client
 
         // Determine which file to execute based on URL path
         $path = parse_url($url, PHP_URL_PATH);
-        $extension = pathinfo((string) $path, PATHINFO_EXTENSION);
 
-        if ($extension === 'php' && is_string($path)) {
-            // URL points to a specific PHP file - use it
-            $fileToExecute = ltrim($path, '/');
-        } else {
+        if (is_string($path) && pathinfo($path, PATHINFO_EXTENSION) === 'php') {
+            // URL points to a specific PHP file, relative to the document root
+            $script = $this->resolveScript(ltrim($path, '/'));
+        } elseif ($this->file !== null) {
             // Use the default configured file
-            $fileToExecute = $this->file;
-        }
-
-        if ($fileToExecute === null) {
+            $script = $this->resolveScript($this->file);
+        } else {
             throw new RuntimeException('No file to execute: the client was constructed with a null $file and the URL does not point to a .php file.');
         }
+
+        if ($script === null) {
+            // Like a web server: the process is never started for a script that doesn't exist or is outside the document root
+            return new Response(
+                statusCode: 404,
+                headers: ['Content-Type: text/plain; charset=UTF-8'],
+                content: "File not found.\n",
+                process: new Process([$this->getPhpExecutable()], $this->documentRoot),
+            );
+        }
+
+        [$scriptName, $scriptFilename, $scriptRealPath] = $script;
 
         $process = new Process(
             command: [
                 $this->getPhpExecutable(),
                 '-d', sprintf('auto_prepend_file=%s', __DIR__ . '/Runtime/bootstrap.php'),
                 '-d', sprintf('disable_functions=%s', implode(',', self::PHP_DISABLED_FUNCTIONS)),
-                $fileToExecute,
+                // Absolute path: it starts with a directory separator, so the PHP binary can't read it as an option
+                $scriptRealPath,
             ],
             cwd: $this->documentRoot,
         );
@@ -92,9 +102,6 @@ final class Client
             $contentType = 'multipart/form-data';
         }
 
-        // SCRIPT_NAME/PHP_SELF should reflect the URL path for PHP files, or configured file otherwise
-        $scriptName = ($extension === 'php' && $path !== null) ? $path : '/' . $fileToExecute;
-
         $request = Request::create(
             uri: $url,
             method: $method,
@@ -102,7 +109,7 @@ final class Client
             server: [
                 'DOCUMENT_ROOT' => $this->documentRoot,
                 'SCRIPT_NAME' => $scriptName,
-                'SCRIPT_FILENAME' => $this->documentRoot . '/' . $fileToExecute,
+                'SCRIPT_FILENAME' => $scriptFilename,
                 'PHP_SELF' => $scriptName,
             ],
             content: $content
@@ -189,6 +196,91 @@ final class Client
             process: $process,
             session: $session
         );
+    }
+
+    /**
+     * Resolve the script to execute, confined to the document root.
+     *
+     * The path is first normalized lexically ("." and ".." segments, repeated separators), as a web server does with the
+     * request path, so that SCRIPT_NAME and SCRIPT_FILENAME match what it would set. The result is then resolved with
+     * realpath(), so that a symbolic link can't lead outside the document root either.
+     *
+     * @param string $file Path relative to the document root, or absolute filesystem path
+     * @return array{string, string, string}|null [scriptName, scriptFilename, realPath], or null when the script
+     *                                            doesn't exist, isn't a file, or is outside the document root
+     */
+    private function resolveScript(string $file): ?array
+    {
+        $documentRootRealPath = realpath($this->documentRoot);
+
+        if ($documentRootRealPath === false || ! is_dir($documentRootRealPath)) {
+            throw new RuntimeException(sprintf('The document root "%s" does not exist or is not a directory.', $this->documentRoot));
+        }
+
+        if (str_contains($file, "\0")) {
+            return null;
+        }
+
+        $normalizeSeparators = static fn (string $path): string => DIRECTORY_SEPARATOR === '\\' ? str_replace('\\', '/', $path) : $path;
+        $file = $normalizeSeparators($file);
+
+        // An absolute filesystem path must start with the document root
+        if (str_starts_with($file, '/') || preg_match('#^[A-Za-z]:/#', $file) === 1) {
+            $relativePath = null;
+
+            foreach ([$this->documentRoot, $documentRootRealPath] as $prefix) {
+                $prefix = rtrim($normalizeSeparators($prefix), '/') . '/';
+
+                if (str_starts_with($file, $prefix)) {
+                    $relativePath = substr($file, strlen($prefix));
+                    break;
+                }
+            }
+
+            if ($relativePath === null) {
+                return null;
+            }
+        } else {
+            $relativePath = $file;
+        }
+
+        $segments = [];
+        foreach (explode('/', $relativePath) as $segment) {
+            if ($segment === '' || $segment === '.') {
+                continue;
+            }
+
+            if ($segment === '..') {
+                if ($segments === []) {
+                    // Above the document root
+                    return null;
+                }
+
+                array_pop($segments);
+
+                continue;
+            }
+
+            $segments[] = $segment;
+        }
+
+        if ($segments === []) {
+            return null;
+        }
+
+        $relativePath = implode('/', $segments);
+        $scriptFilename = $this->documentRoot . '/' . $relativePath;
+        $realPath = realpath($scriptFilename);
+
+        if (
+            $realPath === false
+            || ! is_file($realPath)
+            || ! str_starts_with($realPath, rtrim($documentRootRealPath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR)
+        ) {
+            return null;
+        }
+
+        return ['/' . $relativePath, $scriptFilename, $realPath];
     }
 
     /**
