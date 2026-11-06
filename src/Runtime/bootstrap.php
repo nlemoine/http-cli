@@ -110,17 +110,21 @@ use n5s\HttpCli\Runtime\SessionHandler;
         // Unserialize the data with error handling. All classes are allowed on purpose: the payload comes from the
         // calling process, and objects in the session have to be restored
         // Note: unserialize() doesn't throw exceptions, it returns false and emits warnings
-        set_error_handler(function ($severity, $message, $file, $line): void {
-            throw new ErrorException($message, 0, $severity, $file, $line);
+        $unserializeError = null;
+        set_error_handler(static function (int $severity, string $message) use (&$unserializeError): bool {
+            $unserializeError = $message;
+
+            return true;
         }, E_WARNING | E_NOTICE);
 
         try {
             $unserializedData = unserialize($stdinData);
-        } catch (ErrorException $e) {
-            restore_error_handler();
-            throw new Exception('Failed to unserialize STDIN data: ' . $e->getMessage());
         } finally {
             restore_error_handler();
+        }
+
+        if ($unserializeError !== null) {
+            throw new Exception('Failed to unserialize STDIN data: ' . $unserializeError);
         }
 
         // Additional validation for unserialize result
