@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   qa:
-    uses: nlemoine/.github/.github/workflows/php-qa.yml@5a92d19b83b7b98b52e7a9b3b1ae2402c5635463
+    uses: nlemoine/.github/.github/workflows/php-qa.yml@05f8fcca48f4ccf8bfccf8cb603c88e0ec8779f7
     with:
       cs-tool: ecs
     secrets:
