@@ -3535,9 +3535,6 @@ class ClientTest extends AbstractHttpCliTestCase
         $this->assertTrue($decoded['logged_in']);
     }
 
-    /**
-     * Test multiple session values with various data types
-     */
     public function testMultipleSessionValuesWithVariousDataTypes(): void
     {
         $testFile = $this->createJsonEchoFile('session_types_test', '$_SESSION');
@@ -3857,9 +3854,6 @@ class ClientTest extends AbstractHttpCliTestCase
         $this->assertSame('complete', $decoded['step1']);
     }
 
-    /**
-     * Test session modification in target script
-     */
     public function testSessionModificationInTargetScript(): void
     {
         // Create a test file that modifies session data
@@ -4013,9 +4007,6 @@ class ClientTest extends AbstractHttpCliTestCase
         $this->assertArrayNotHasKey('session', $array);
     }
 
-    /**
-     * Test session overwriting with builder method
-     */
     public function testSessionOverwritingWithBuilderMethod(): void
     {
         $testFile = $this->createJsonEchoFile('session_overwrite_test', '$_SESSION');
@@ -4199,9 +4190,6 @@ class ClientTest extends AbstractHttpCliTestCase
         $this->assertCount(2, $cartData['cart']);
     }
 
-    /**
-     * Test session cleared by script
-     */
     public function testSessionClearedByScript(): void
     {
         $testFile = $this->createTestFile('clear_session', '<?php

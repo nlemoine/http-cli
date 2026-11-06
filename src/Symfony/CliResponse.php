@@ -122,9 +122,7 @@ final class CliResponse implements ResponseInterface
     public function getInfo(?string $type = null): mixed
     {
         // Lazy load content type if not set
-        if (! isset($this->info['content_type'])) {
-            $this->info['content_type'] = $this->headers['content-type'][0] ?? null;
-        }
+        $this->info['content_type'] ??= $this->headers['content-type'][0] ?? null;
 
         if ($type === null) {
             return $this->info;
@@ -152,9 +150,7 @@ final class CliResponse implements ResponseInterface
             $name = strtolower(trim($name));
             $value = trim($value);
 
-            if (! isset($headers[$name])) {
-                $headers[$name] = [];
-            }
+            $headers[$name] ??= [];
             $headers[$name][] = $value;
 
             // Add to info response_headers array (preserving original case)

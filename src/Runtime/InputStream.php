@@ -26,7 +26,7 @@ final class InputStream
      *
      * @var resource|null
      */
-    public $context = null;
+    public $context;
 
     /**
      * Current position in the input stream.
@@ -65,7 +65,7 @@ final class InputStream
      *
      * @var resource|null
      */
-    private $realHandle = null;
+    private $realHandle;
 
     /**
      * Set the raw input data that will be available via php://input.
@@ -280,7 +280,6 @@ final class InputStream
     /**
      * Truncate the stream.
      *
-     * @param int $newSize New size
      * @return bool True on success
      */
     public function stream_truncate(int $newSize): bool
