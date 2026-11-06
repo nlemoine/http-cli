@@ -273,9 +273,7 @@ class CliHandler
             if ($colonPos !== false) {
                 $name = trim(substr($header, 0, $colonPos));
                 $value = trim(substr($header, $colonPos + 1));
-                if (! isset($parsed[$name])) {
-                    $parsed[$name] = [];
-                }
+                $parsed[$name] ??= [];
                 $parsed[$name][] = $value;
             }
         }
