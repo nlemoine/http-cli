@@ -253,15 +253,13 @@ class CliHandler
         // Remove content-encoding header
         unset($headers[$normalizedKeys['content-encoding']]);
 
-        // Fix content-length header
+        // The decoded length is unknown until the body is inflated, and
+        // InflateStream::getSize() reports the encoded size. Keep the original
+        // value aside and drop Content-Length, as Guzzle 8 does, so drain()
+        // copies the whole decoded body.
         if (isset($normalizedKeys['content-length'])) {
             $headers['x-encoded-content-length'] = $headers[$normalizedKeys['content-length']];
-            $length = (int) $stream->getSize();
-            if ($length === 0) {
-                unset($headers[$normalizedKeys['content-length']]);
-            } else {
-                $headers[$normalizedKeys['content-length']] = [(string) $length];
-            }
+            unset($headers[$normalizedKeys['content-length']]);
         }
 
         return [$stream, $headers];

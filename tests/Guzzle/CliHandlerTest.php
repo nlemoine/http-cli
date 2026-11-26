@@ -740,6 +740,27 @@ class CliHandlerTest extends AbstractHttpCliTestCase
         $this->assertEquals('deflate', $response->getHeaderLine('x-encoded-content-encoding'));
     }
 
+    public function testDecodeContentKeepsTheWholeCompressibleBody(): void
+    {
+        // Compresses far below its size: the encoded Content-Length must not
+        // cap the decoded body
+        $this->createTestFile('index', '<?php
+            $content = gzencode(str_repeat("a", 50000));
+            header("Content-Encoding: gzip");
+            header("Content-Length: " . strlen($content));
+            echo $content;
+        ');
+        $handler = $this->createHandler('index.php');
+
+        $response = ($handler)(new Request('GET', 'http://localhost/'), [
+            RequestOptions::DECODE_CONTENT => true,
+        ])->wait();
+
+        $this->assertSame(str_repeat('a', 50000), (string) $response->getBody());
+        $this->assertFalse($response->hasHeader('Content-Length'));
+        $this->assertSame((string) strlen((string) gzencode(str_repeat('a', 50000))), $response->getHeaderLine('x-encoded-content-length'));
+    }
+
     public function testDecodeContentDisabledReturnsRawContent(): void
     {
         $gzipFile = $this->testDocumentRoot . '/gzip_raw.php';
