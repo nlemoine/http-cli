@@ -10,11 +10,17 @@ interface GlobalsHandler
      * Customize the superglobals array before it's sent to the child process.
      *
      * The script gets these arrays as they are left here, whatever the ini of
-     * the PHP process that runs it. _ENV starts empty: the environment of the
-     * PHP process is only readable with getenv(). _REQUEST is built from
-     * _GET, _POST and _COOKIE with the current request_order, for reading:
-     * the script's PHP builds it again with its own ini from the arrays left
-     * here, unless this method changes _REQUEST itself, which is then kept.
+     * the PHP process that runs it. Only the keys below reach the script:
+     * other keys added to the array are ignored.
+     *
+     * _ENV starts empty, so $_ENV holds only what is set here. The
+     * environment of the PHP process stays readable with getenv().
+     *
+     * _REQUEST is built from _GET, _POST and _COOKIE with the current
+     * request_order, for reading. The script's PHP builds it again with its
+     * own ini from the arrays left here, unless this method changes _REQUEST,
+     * which is then sent as is (so built with the current request_order). A
+     * _REQUEST left equal to the value built here counts as unchanged.
      *
      * @param array{
      *     _ENV: array<string, mixed>,

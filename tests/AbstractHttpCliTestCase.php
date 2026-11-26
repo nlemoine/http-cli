@@ -83,4 +83,22 @@ abstract class AbstractHttpCliTestCase extends TestCase
 
         return $fullPath;
     }
+
+    /**
+     * Path of a PHP binary that runs the real one with the given ini options,
+     * to pass as the client's phpExecutable. What the script sees must not
+     * depend on the php.ini of the machine running the tests.
+     */
+    protected function phpWithIni(string $iniOptions): string
+    {
+        if (\DIRECTORY_SEPARATOR === '\\') {
+            $this->markTestSkipped('The PHP wrapper is a shell script');
+        }
+
+        $wrapper = $this->tempDir . '/php-' . md5($iniOptions);
+        file_put_contents($wrapper, sprintf("#!/bin/sh\nexec %s %s \"\$@\"\n", escapeshellarg(PHP_BINARY), $iniOptions));
+        chmod($wrapper, 0755);
+
+        return $wrapper;
+    }
 }

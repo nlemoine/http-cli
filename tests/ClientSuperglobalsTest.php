@@ -79,19 +79,40 @@ final class ClientSuperglobalsTest extends AbstractHttpCliTestCase
     }
 
     /**
-     * @return iterable<string, array{string, string}>
+     * @return iterable<string, array{string, array<string, string>}>
      */
     public static function requestOrderProvider(): iterable
     {
-        yield 'request_order=GP' => ['-d request_order=GP', 'post'];
-        yield 'request_order=GPC' => ['-d request_order=GPC', 'cookie'];
-        yield 'request_order=PG' => ['-d request_order=PG', 'get'];
-        yield 'empty request_order, variables_order=EGPCS' => ['-d request_order= -d variables_order=EGPCS', 'cookie'];
-        yield 'empty request_order, variables_order=GPCS without JIT' => ['-d request_order= -d variables_order=GPCS -d auto_globals_jit=0', 'cookie'];
+        yield 'request_order=GP' => ['-d request_order=GP', [
+            'key' => 'post',
+            'from_get' => '1',
+        ]];
+        yield 'request_order=GPC' => ['-d request_order=GPC', [
+            'key' => 'cookie',
+            'from_get' => '1',
+        ]];
+        yield 'request_order=PG' => ['-d request_order=PG', [
+            'key' => 'get',
+            'from_get' => '1',
+        ]];
+        // Set but empty: PHP builds an empty $_REQUEST, it does not fall back to variables_order
+        yield 'empty request_order' => ['-d request_order= -d variables_order=EGPCS', []];
+        // Not set at all (-n loads no php.ini): PHP falls back to variables_order
+        yield 'request_order not set, variables_order=EGPCS' => ['-n -d variables_order=EGPCS', [
+            'key' => 'cookie',
+            'from_get' => '1',
+        ]];
+        yield 'request_order not set, variables_order=GPCS without JIT' => ['-n -d variables_order=GPCS -d auto_globals_jit=0', [
+            'key' => 'cookie',
+            'from_get' => '1',
+        ]];
     }
 
+    /**
+     * @param array<string, string> $expected
+     */
     #[DataProvider('requestOrderProvider')]
-    public function testRequestFollowsTheIniOfTheScript(string $iniOptions, string $expected): void
+    public function testRequestFollowsTheIniOfTheScript(string $iniOptions, array $expected): void
     {
         $this->createTestFile('index', '<?php echo json_encode($_REQUEST);');
 
@@ -104,10 +125,29 @@ final class ClientSuperglobalsTest extends AbstractHttpCliTestCase
             ])
             ->build());
 
-        $request = json_decode($response->getContent(), true);
-        $this->assertIsArray($request);
-        $this->assertSame($expected, $request['key']);
-        $this->assertSame('1', $request['from_get']);
+        $this->assertSame($expected, json_decode($response->getContent(), true));
+    }
+
+    public function testRequestMergesNestedAndNumericKeysLikePhp(): void
+    {
+        $this->createTestFile('index', '<?php echo json_encode($_REQUEST);');
+
+        $response = $this->client('-d request_order=GPC')->request('GET', 'http://localhost/?a[x]=1&0=q', RequestOptions::create()
+            ->cookies([
+                'a' => [
+                    'y' => '2',
+                ],
+                0 => 'c',
+            ])
+            ->build());
+
+        $this->assertSame([
+            'a' => [
+                'x' => '1',
+                'y' => '2',
+            ],
+            0 => 'c',
+        ], json_decode($response->getContent(), true));
     }
 
     public function testRequestReflectsGlobalsHandlerChangesToGet(): void
@@ -150,18 +190,71 @@ final class ClientSuperglobalsTest extends AbstractHttpCliTestCase
     }
 
     /**
-     * A client whose PHP binary is a wrapper adding the given ini options.
+     * @return iterable<string, array{\Closure(array<string, mixed>): array<string, mixed>, array<mixed>}>
      */
-    private function client(string $iniOptions, ?GlobalsHandler $handler = null): Client
+    public static function requestHandlerProvider(): iterable
     {
-        if (\DIRECTORY_SEPARATOR === '\\') {
-            $this->markTestSkipped('The PHP wrapper is a shell script');
+        yield 'removed: built by the script' => [static function (array $globals): array {
+            unset($globals['_REQUEST']);
+
+            return $globals;
+        }, [
+            'a' => '1',
+        ]];
+        yield 'null: built by the script' => [static function (array $globals): array {
+            $globals['_REQUEST'] = null;
+
+            return $globals;
+        }, [
+            'a' => '1',
+        ]];
+        yield 'emptied: kept' => [static function (array $globals): array {
+            $globals['_REQUEST'] = [];
+
+            return $globals;
+        }, []];
+    }
+
+    /**
+     * @param \Closure(array<string, mixed>): array<string, mixed> $change
+     * @param array<mixed> $expected
+     */
+    #[DataProvider('requestHandlerProvider')]
+    public function testRequestChangedByAGlobalsHandler(\Closure $change, array $expected): void
+    {
+        $this->createTestFile('index', '<?php echo json_encode($_REQUEST);');
+
+        $handler = new class($change) implements GlobalsHandler {
+            public function __construct(
+                private readonly \Closure $change
+            ) {
+            }
+
+            public function handle(array &$globals): void
+            {
+                $globals = ($this->change)($globals);
+            }
+        };
+
+        $warnings = [];
+        set_error_handler(static function (int $severity, string $message) use (&$warnings): bool {
+            $warnings[] = $message;
+
+            return true;
+        });
+
+        try {
+            $response = $this->client('-d request_order=GP', $handler)->request('GET', 'http://localhost/?a=1');
+        } finally {
+            restore_error_handler();
         }
 
-        $wrapper = $this->tempDir . '/php';
-        file_put_contents($wrapper, sprintf("#!/bin/sh\nexec %s %s \"\$@\"\n", escapeshellarg(PHP_BINARY), $iniOptions));
-        chmod($wrapper, 0755);
+        $this->assertSame([], $warnings);
+        $this->assertSame($expected, json_decode($response->getContent(), true));
+    }
 
-        return new Client($this->testDocumentRoot, 'index.php', $handler, $wrapper);
+    private function client(string $iniOptions, ?GlobalsHandler $handler = null): Client
+    {
+        return new Client($this->testDocumentRoot, 'index.php', $handler, $this->phpWithIni($iniOptions));
     }
 }

@@ -7,6 +7,7 @@ namespace n5s\HttpCli\Tests;
 use n5s\HttpCli\Runtime\RequestSuperglobal;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Process\Process;
 
 final class RequestSuperglobalTest extends TestCase
 {
@@ -106,11 +107,34 @@ final class RequestSuperglobalTest extends TestCase
         ], $request);
     }
 
-    public function testOrderFallsBackToVariablesOrder(): void
+    /**
+     * @return iterable<string, array{list<string>, string}>
+     */
+    public static function iniOrderProvider(): iterable
     {
-        $requestOrder = (string) \ini_get('request_order');
-        $variablesOrder = (string) \ini_get('variables_order');
+        yield 'request_order set' => [['-d', 'request_order=GP', '-d', 'variables_order=EGPCS'], 'GP'];
+        // Set but empty: PHP builds an empty $_REQUEST, it does not fall back
+        yield 'request_order empty' => [['-d', 'request_order=', '-d', 'variables_order=EGPCS'], ''];
+        yield 'request_order not set' => [['-d', 'variables_order=EGPCS'], 'EGPCS'];
+    }
 
-        $this->assertSame($requestOrder !== '' ? $requestOrder : $variablesOrder, RequestSuperglobal::order());
+    /**
+     * @param list<string> $iniOptions
+     */
+    #[DataProvider('iniOrderProvider')]
+    public function testOrderOfTheRunningPhp(array $iniOptions, string $expected): void
+    {
+        // -n: no php.ini, so request_order is only what the options set
+        $process = new Process([
+            PHP_BINARY,
+            '-n',
+            ...$iniOptions,
+            '-r',
+            'require $argv[1]; echo n5s\HttpCli\Runtime\RequestSuperglobal::order();',
+            \dirname(__DIR__) . '/src/Runtime/RequestSuperglobal.php',
+        ]);
+        $process->mustRun();
+
+        $this->assertSame($expected, $process->getOutput());
     }
 }

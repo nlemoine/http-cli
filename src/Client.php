@@ -414,12 +414,13 @@ final class Client
 
         // What the handler sees. The script's $_REQUEST is built again by its own PHP process, with its ini and from the
         // $_GET, $_POST and $_COOKIE the handler leaves, unless the handler changed _REQUEST itself.
-        $request = RequestSuperglobal::build($globals['_GET'], $globals['_POST'], $globals['_COOKIE'], RequestSuperglobal::order());
-        $globals['_REQUEST'] = $request;
+        $builtRequest = RequestSuperglobal::build($globals['_GET'], $globals['_POST'], $globals['_COOKIE'], RequestSuperglobal::order());
+        $globals['_REQUEST'] = $builtRequest;
 
         $this->globalsHandler?->handle($globals);
 
-        if ($globals['_REQUEST'] === $request) {
+        // A handler may also have removed it
+        if (($globals['_REQUEST'] ?? null) === $builtRequest) {
             unset($globals['_REQUEST']);
         }
 
