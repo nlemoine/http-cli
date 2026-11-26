@@ -24,6 +24,13 @@ class CliHandler
 {
     private readonly GuzzleToRequestOptionsAdapter $adapter;
 
+    /**
+     * Exception thrown by the caller's on_stats callback during the current
+     * request. It is rethrown as is instead of being wrapped as a transfer
+     * failure, like Guzzle 8's handlers do.
+     */
+    private ?\Throwable $onStatsException = null;
+
     public function __construct(
         private readonly Client $httpCliClient
     ) {
@@ -44,7 +51,9 @@ class CliHandler
         $protocolVersion = $request->getProtocolVersion();
 
         if ($protocolVersion !== '1.0' && $protocolVersion !== '1.1') {
-            throw new ConnectException(
+            // Not a network failure: Guzzle 8 throws RequestException here,
+            // and a ConnectException would look retryable to retry deciders.
+            throw new RequestException(
                 \sprintf('HTTP/%s is not supported by the CLI handler.', $protocolVersion),
                 $request
             );
@@ -75,12 +84,20 @@ class CliHandler
             );
         } catch (\InvalidArgumentException $e) {
             throw $e;
-        } catch (TransferException $e) {
-            $e = new ConnectException('The process timed out', $request, $e);
-            $this->invokeStats($options, $request, $startTime, null, $e);
-
-            return P\Create::rejectionFor($e);
         } catch (\Exception $e) {
+            $onStatsException = $this->onStatsException;
+            $this->onStatsException = null;
+            if ($e === $onStatsException) {
+                throw $e;
+            }
+
+            if ($e instanceof TransferException) {
+                $e = new ConnectException('The process timed out', $request, $e);
+                $this->invokeStats($options, $request, $startTime, null, $e);
+
+                return P\Create::rejectionFor($e);
+            }
+
             // Determine if the error was a networking error.
             $message = $e->getMessage();
             if (
@@ -119,16 +136,16 @@ class CliHandler
         $parsedHeaders = $this->parseHeaders($cliResponse->getHeaders());
         [$stream, $headers] = $this->checkDecode($options, $parsedHeaders, $cliResponse->getContent());
         $stream = Psr7\Utils::streamFor($stream);
-        $sink = $stream;
+        $statusCode = (int) $cliResponse->getStatusCode();
 
-        // Do not drain when the request is a HEAD request because they have no body.
-        if (\strcasecmp('HEAD', $request->getMethod())) {
-            $sink = $this->createSink($stream, $options);
-        }
+        // A response without a body never touches the sink, so a sink file
+        // is not truncated by a 204 or a 304.
+        $canHaveBody = self::responseCanHaveBody($request->getMethod(), $statusCode);
+        $sink = $canHaveBody ? $this->createSink($stream, $options) : Psr7\Utils::streamFor('');
 
         try {
             $response = new Response(
-                (int) $cliResponse->getStatusCode(),
+                $statusCode,
                 $headers,
                 $sink,
                 '1.1', // HTTP version - CLI always simulates HTTP/1.1
@@ -153,7 +170,7 @@ class CliHandler
         }
 
         // Drain the source stream into the sink after on_headers callback
-        if ($sink !== $stream) {
+        if ($canHaveBody && $sink !== $stream) {
             $this->drain($stream, $sink, $response->getHeaderLine('Content-Length'));
         }
 
@@ -179,7 +196,25 @@ class CliHandler
         }
 
         $stats = new TransferStats($request, $response, self::currentTime() - $startTime, $error, []);
-        ($options[RequestOptions::ON_STATS])($stats);
+
+        try {
+            ($options[RequestOptions::ON_STATS])($stats);
+        } catch (\Throwable $e) {
+            $this->onStatsException = $e;
+
+            throw $e;
+        }
+    }
+
+    /**
+     * RFC 9110: HEAD responses and 1xx, 204 and 304 statuses have no body.
+     */
+    private static function responseCanHaveBody(string $method, int $statusCode): bool
+    {
+        return \strcasecmp('HEAD', $method) !== 0
+            && $statusCode >= 200
+            && $statusCode !== 204
+            && $statusCode !== 304;
     }
 
     /**
