@@ -23,6 +23,12 @@
         "source": "https://github.com/nlemoine/http-cli",
         "security": "https://github.com/nlemoine/http-cli/security/policy"
     },
+    "funding": [
+        {
+            "type": "github",
+            "url": "https://github.com/sponsors/nlemoine"
+        }
+    ],
     "require": {
         "php": "^8.2",
         "symfony/http-foundation": "^7.4 || ^8.0",
