@@ -7,6 +7,7 @@ namespace n5s\HttpCli\Tests;
 use n5s\HttpCli\Client;
 use n5s\HttpCli\GlobalsHandler;
 use n5s\HttpCli\RequestOptions;
+use n5s\HttpCli\Runtime\RequestSuperglobal;
 use ReflectionClass;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\Request;
@@ -66,7 +67,8 @@ class ClientHelperMethodsTest extends AbstractHttpCliTestCase
         $this->assertArrayHasKey('_FILES', $globals);
         $this->assertArrayHasKey('_SESSION', $globals);
         $this->assertArrayHasKey('_SERVER', $globals);
-        $this->assertArrayHasKey('_REQUEST', $globals);
+        // Built by the script's own PHP process, from its ini, unless a globals handler changes it
+        $this->assertArrayNotHasKey('_REQUEST', $globals);
 
         // Test GET parameters
         $this->assertEquals([
@@ -93,13 +95,6 @@ class ClientHelperMethodsTest extends AbstractHttpCliTestCase
         // Test QUERY_STRING generation
         $this->assertStringContainsString('param1=value1', $globals['_SERVER']['QUERY_STRING']);
         $this->assertStringContainsString('param2=value2', $globals['_SERVER']['QUERY_STRING']);
-
-        // Test _REQUEST merging
-        $this->assertArrayHasKey('param1', $globals['_REQUEST']);
-        $this->assertArrayHasKey('post_param', $globals['_REQUEST']);
-        // Note: cookie_name may or may not be in _REQUEST depending on request_order ini setting
-        // By default PHP uses "GP" (GET and POST only), so cookies are not included
-        // This matches Symfony's behavior exactly
     }
 
     public function testGetGlobalsWithSpecialHeaders(): void
@@ -130,10 +125,21 @@ class ClientHelperMethodsTest extends AbstractHttpCliTestCase
         $this->assertArrayHasKey('HTTP_CONTENT_MD5', $globals['_SERVER']);
     }
 
-    public function testGetGlobalsRequestOrderHandling(): void
+    public function testGlobalsHandlerSeesRequestBuiltWithTheCurrentOrder(): void
     {
-        $reflection = new ReflectionClass($this->client);
-        $method = $reflection->getMethod('getGlobals');
+        $handler = new class() implements GlobalsHandler {
+            /**
+             * @var array<mixed>
+             */
+            public array $request = [];
+
+            public function handle(array &$globals): void
+            {
+                $this->request = $globals['_REQUEST'];
+            }
+        };
+        $client = new Client($this->testDocumentRoot, 'test.php', $handler);
+        $method = (new ReflectionClass($client))->getMethod('getGlobals');
 
         // Create request with overlapping parameter names
         $request = Request::create(
@@ -147,11 +153,11 @@ class ClientHelperMethodsTest extends AbstractHttpCliTestCase
             ]
         );
 
-        $globals = $method->invoke($this->client, $request);
+        $globals = $method->invoke($client, $request);
 
-        // The _REQUEST array should contain merged values
-        // The exact behavior depends on request_order setting
-        $this->assertArrayHasKey('name', $globals['_REQUEST']);
+        $this->assertSame(RequestSuperglobal::build($globals['_GET'], $globals['_POST'], $globals['_COOKIE'], RequestSuperglobal::order()), $handler->request);
+        // Not sent, since the handler left it unchanged
+        $this->assertArrayNotHasKey('_REQUEST', $globals);
 
         // Verify individual arrays are correct
         $this->assertEquals('get_value', $globals['_GET']['name']);

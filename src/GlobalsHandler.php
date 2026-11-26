@@ -11,7 +11,10 @@ interface GlobalsHandler
      *
      * The script gets these arrays as they are left here, whatever the ini of
      * the PHP process that runs it. _ENV starts empty: the environment of the
-     * PHP process is only readable with getenv().
+     * PHP process is only readable with getenv(). _REQUEST is built from
+     * _GET, _POST and _COOKIE with the current request_order, for reading:
+     * the script's PHP builds it again with its own ini from the arrays left
+     * here, unless this method changes _REQUEST itself, which is then kept.
      *
      * @param array{
      *     _ENV: array<string, mixed>,

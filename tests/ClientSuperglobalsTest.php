@@ -6,6 +6,7 @@ namespace n5s\HttpCli\Tests;
 
 use n5s\HttpCli\Client;
 use n5s\HttpCli\GlobalsHandler;
+use n5s\HttpCli\RequestOptions;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
@@ -74,6 +75,77 @@ final class ClientSuperglobalsTest extends AbstractHttpCliTestCase
 
         $this->assertSame([
             'APP_ENV' => 'test',
+        ], json_decode($response->getContent(), true));
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function requestOrderProvider(): iterable
+    {
+        yield 'request_order=GP' => ['-d request_order=GP', 'post'];
+        yield 'request_order=GPC' => ['-d request_order=GPC', 'cookie'];
+        yield 'request_order=PG' => ['-d request_order=PG', 'get'];
+        yield 'empty request_order, variables_order=EGPCS' => ['-d request_order= -d variables_order=EGPCS', 'cookie'];
+        yield 'empty request_order, variables_order=GPCS without JIT' => ['-d request_order= -d variables_order=GPCS -d auto_globals_jit=0', 'cookie'];
+    }
+
+    #[DataProvider('requestOrderProvider')]
+    public function testRequestFollowsTheIniOfTheScript(string $iniOptions, string $expected): void
+    {
+        $this->createTestFile('index', '<?php echo json_encode($_REQUEST);');
+
+        $response = $this->client($iniOptions)->request('POST', 'http://localhost/?key=get&from_get=1', RequestOptions::create()
+            ->formParams([
+                'key' => 'post',
+            ])
+            ->cookies([
+                'key' => 'cookie',
+            ])
+            ->build());
+
+        $request = json_decode($response->getContent(), true);
+        $this->assertIsArray($request);
+        $this->assertSame($expected, $request['key']);
+        $this->assertSame('1', $request['from_get']);
+    }
+
+    public function testRequestReflectsGlobalsHandlerChangesToGet(): void
+    {
+        $this->createTestFile('index', '<?php echo json_encode($_REQUEST);');
+
+        $handler = new class() implements GlobalsHandler {
+            public function handle(array &$globals): void
+            {
+                $globals['_GET']['added'] = 'by handler';
+            }
+        };
+
+        $response = $this->client('-d request_order=GP', $handler)->request('GET', 'http://localhost/?a=1');
+
+        $this->assertSame([
+            'a' => '1',
+            'added' => 'by handler',
+        ], json_decode($response->getContent(), true));
+    }
+
+    public function testRequestSetByAGlobalsHandlerIsKept(): void
+    {
+        $this->createTestFile('index', '<?php echo json_encode($_REQUEST);');
+
+        $handler = new class() implements GlobalsHandler {
+            public function handle(array &$globals): void
+            {
+                $globals['_REQUEST'] = [
+                    'only' => 'this',
+                ];
+            }
+        };
+
+        $response = $this->client('-d request_order=GP', $handler)->request('GET', 'http://localhost/?a=1');
+
+        $this->assertSame([
+            'only' => 'this',
         ], json_decode($response->getContent(), true));
     }
 
