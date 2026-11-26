@@ -91,8 +91,9 @@ class CliHandler
                 throw $e;
             }
 
+            // Already a Guzzle transfer failure, for example from a sink
+            // stream the caller passed: keep it as is, like Guzzle 8.
             if ($e instanceof TransferException) {
-                $e = new ConnectException('The process timed out', $request, $e);
                 $this->invokeStats($options, $request, $startTime, null, $e);
 
                 return P\Create::rejectionFor($e);

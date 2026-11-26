@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace n5s\HttpCli\Tests\Guzzle;
 
+use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Exception\ResponseException;
 use GuzzleHttp\Promise\PromiseInterface;
+use GuzzleHttp\Psr7\FnStream;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Utils;
 use GuzzleHttp\RequestOptions;
@@ -256,6 +258,37 @@ class CliHandlerTest extends AbstractHttpCliTestCase
 
         $this->assertSame('OK', (string) $response->getBody());
         $this->assertGreaterThanOrEqual(45, (microtime(true) - $startTime) * 1000);
+    }
+
+    public function testTransferExceptionFromTheSinkIsKeptAsIs(): void
+    {
+        $this->createTestFile('index', '<?php echo "OK";');
+        $handler = $this->createHandler('index.php');
+
+        $request = new Request('GET', 'http://localhost/');
+        $sinkError = new ConnectException('sink failed', $request);
+        $sink = FnStream::decorate(Utils::streamFor(''), [
+            'write' => static function () use ($sinkError): never {
+                throw $sinkError;
+            },
+        ]);
+
+        $stats = null;
+        $options = [
+            RequestOptions::SINK => $sink,
+            RequestOptions::ON_STATS => function (TransferStats $transferStats) use (&$stats): void {
+                $stats = $transferStats;
+            },
+        ];
+
+        try {
+            ($handler)($request, $options)->wait();
+            $this->fail('The promise should be rejected');
+        } catch (ConnectException $e) {
+            $this->assertSame($sinkError, $e);
+            $this->assertInstanceOf(TransferStats::class, $stats);
+            $this->assertSame($sinkError, $stats->getHandlerErrorData());
+        }
     }
 
     // ON_STATS Callback Tests
