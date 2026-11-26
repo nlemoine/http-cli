@@ -15,7 +15,6 @@ use GuzzleHttp\Psr7;
 use GuzzleHttp\Psr7\Response;
 use GuzzleHttp\RequestOptions;
 use GuzzleHttp\TransferStats;
-use GuzzleHttp\Utils;
 use n5s\HttpCli\Client;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -230,7 +229,12 @@ class CliHandler
             return [$stream, $headers];
         }
 
-        $normalizedKeys = Utils::normalizeHeaderKeys($headers);
+        // Lowercase name => original name. Utils::normalizeHeaderKeys() did
+        // this but is deprecated since Guzzle 8.5.
+        $normalizedKeys = [];
+        foreach (\array_keys($headers) as $name) {
+            $normalizedKeys[\strtolower($name)] = $name;
+        }
         if (! isset($normalizedKeys['content-encoding'])) {
             return [$stream, $headers];
         }
