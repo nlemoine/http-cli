@@ -6,6 +6,7 @@ namespace n5s\HttpCli\Guzzle;
 
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Exception\ResponseException;
 use GuzzleHttp\Exception\TransferException;
 use GuzzleHttp\Promise as P;
 use GuzzleHttp\Promise\FulfilledPromise;
@@ -49,7 +50,7 @@ class CliHandler
             );
         }
 
-        $startTime = isset($options[RequestOptions::ON_STATS]) ? Utils::currentTime() : null;
+        $startTime = isset($options[RequestOptions::ON_STATS]) ? self::currentTime() : null;
 
         try {
             // Does not support the expect header.
@@ -90,7 +91,7 @@ class CliHandler
             ) {
                 $e = new ConnectException($e->getMessage(), $request, $e);
             } else {
-                $e = RequestException::wrapException($request, $e);
+                $e = new RequestException($e->getMessage(), $request, previous: $e);
             }
             $this->invokeStats($options, $request, $startTime, null, $e);
 
@@ -135,16 +136,16 @@ class CliHandler
             );
         } catch (\Exception $e) {
             return P\Create::rejectionFor(
-                new RequestException('An error was encountered while creating the response', $request, null, $e)
+                new RequestException('An error was encountered while creating the response', $request, previous: $e)
             );
         }
 
         if (isset($options[RequestOptions::ON_HEADERS])) {
             try {
-                $options[RequestOptions::ON_HEADERS]($response);
+                $options[RequestOptions::ON_HEADERS]($response, $request);
             } catch (\Exception $e) {
                 return P\Create::rejectionFor(
-                    new RequestException('An error was encountered during the on_headers event', $request, $response, $e)
+                    self::responseException('An error was encountered during the on_headers event', $request, $response, $e)
                 );
             }
         }
@@ -175,7 +176,7 @@ class CliHandler
             return;
         }
 
-        $stats = new TransferStats($request, $response, Utils::currentTime() - $startTime, $error, []);
+        $stats = new TransferStats($request, $response, self::currentTime() - $startTime, $error, []);
         ($options[RequestOptions::ON_STATS])($stats);
     }
 
@@ -313,5 +314,31 @@ class CliHandler
         }
 
         return $guzzleOptions;
+    }
+
+    /**
+     * Monotonic clock in seconds. Guzzle 7 exposed this as Utils::currentTime(),
+     * Guzzle 8 removed it.
+     */
+    private static function currentTime(): float
+    {
+        return \hrtime(true) / 1e9;
+    }
+
+    /**
+     * Build a response-aware request exception. Guzzle 8 moved the response
+     * from RequestException to the new ResponseException subclass.
+     */
+    private static function responseException(
+        string $message,
+        RequestInterface $request,
+        ResponseInterface $response,
+        \Throwable $previous
+    ): RequestException {
+        if (\class_exists(ResponseException::class)) {
+            return new ResponseException($message, $request, $response, $previous);
+        }
+
+        return new RequestException($message, $request, $response, $previous);
     }
 }

@@ -3,3 +3,14 @@ parameters:
     treatPhpDocTypesAsCertain: false
     paths:
         - src
+    ignoreErrors:
+        # Guzzle 7 and 8 compatibility in CliHandler::responseException():
+        # each major version reports the branch written for the other one.
+        -
+            rawMessage: 'Parameter #3 $code of class GuzzleHttp\Exception\RequestException constructor expects int, Psr\Http\Message\ResponseInterface given.'
+            path: src/Guzzle/CliHandler.php
+            reportUnmatched: false
+        -
+            rawMessage: 'Method n5s\HttpCli\Guzzle\CliHandler::responseException() should return GuzzleHttp\Exception\RequestException but returns GuzzleHttp\Exception\ResponseException.'
+            path: src/Guzzle/CliHandler.php
+            reportUnmatched: false
