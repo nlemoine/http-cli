@@ -269,6 +269,17 @@ class InputStreamTest extends TestCase
         $this->assertSame('stderr test', $process->getErrorOutput());
     }
 
+    public function testPhpStderrCanBeOpenedInProcess(): void
+    {
+        // Opening writes nothing, so this is safe for the runner's stderr
+        InputStream::register();
+
+        $handle = fopen('php://stderr', 'w');
+        $this->assertNotFalse($handle, 'php://stderr should be openable after registration');
+
+        fclose($handle);
+    }
+
     public function testPhpMemorySeekAndTell(): void
     {
         InputStream::register();
