@@ -7,6 +7,7 @@ namespace n5s\HttpCli\Tests;
 use n5s\HttpCli\Client;
 use n5s\HttpCli\GlobalsHandler;
 use ReflectionClass;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\Request;
 
 class ClientHelperMethodsTest extends AbstractHttpCliTestCase
@@ -219,6 +220,26 @@ class ClientHelperMethodsTest extends AbstractHttpCliTestCase
         $data = json_decode($response->getContent(), true);
 
         $this->assertEquals('test_value', $data['server']);
+    }
+
+    public function testUnserializableGlobalsThrow(): void
+    {
+        $handler = new class() implements GlobalsHandler {
+            public function handle(array &$globals): void
+            {
+                $globals['_SERVER']['MY_CALLBACK'] = static fn (): null => null;
+            }
+        };
+        $client = new Client($this->testDocumentRoot, 'index.php', $handler);
+
+        try {
+            $client->request('GET', 'http://localhost/index.php');
+            $this->fail('The request should have failed');
+        } catch (RuntimeException $e) {
+            $this->assertSame("Failed to serialize globals data: Serialization of 'Closure' is not allowed", $e->getMessage());
+            $this->assertInstanceOf(\Exception::class, $e->getPrevious());
+            $this->assertSame("Serialization of 'Closure' is not allowed", $e->getPrevious()->getMessage());
+        }
     }
 
     public function testNullGlobalsHandlerIsNoOp(): void

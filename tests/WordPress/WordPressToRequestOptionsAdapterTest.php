@@ -139,7 +139,7 @@ class WordPressToRequestOptionsAdapterTest extends TestCase
             'follow_redirects' => false,
         ]);
 
-        $this->assertEquals(0, $result->maxRedirects);
+        $this->assertSame(0, $result->maxRedirects);
     }
 
     public function testTransformRedirectsWithFollowRedirectsTrue(): void

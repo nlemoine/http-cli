@@ -373,6 +373,66 @@ class CliResponseTest extends TestCase
         }
     }
 
+    public function testGetHeadersThrowsByDefaultOnClientError(): void
+    {
+        $response = new CliResponse($this->createHttpCliResponse(404), []);
+
+        $this->expectException(ClientException::class);
+        $response->getHeaders();
+    }
+
+    public function testGetContentThrowsByDefaultOnServerError(): void
+    {
+        $response = new CliResponse($this->createHttpCliResponse(500, [], 'Error'), []);
+
+        $this->expectException(ServerException::class);
+        $response->getContent();
+    }
+
+    public function testToArrayThrowsByDefaultOnClientError(): void
+    {
+        $response = new CliResponse($this->createHttpCliResponse(400, [], '{"error": "bad request"}'), []);
+
+        $this->expectException(ClientException::class);
+        $response->toArray();
+    }
+
+    public function testToArrayDoesNotThrowOnClientErrorWithFalse(): void
+    {
+        $response = new CliResponse($this->createHttpCliResponse(400, [], '{"error": "bad request"}'), []);
+
+        $this->assertSame([
+            'error' => 'bad request',
+        ], $response->toArray(false));
+    }
+
+    public function testToArrayInvalidJsonMessageIncludesJsonErrorAndUrl(): void
+    {
+        $response = new CliResponse(
+            $this->createHttpCliResponse(200, [], 'not valid json'),
+            [
+                'url' => 'http://example.com/api',
+            ]
+        );
+
+        $this->expectException(JsonException::class);
+        $this->expectExceptionMessage('Syntax error for "http://example.com/api".');
+        $response->toArray(false);
+    }
+
+    public function testHeaderValueContainingColonsIsKeptWhole(): void
+    {
+        $response = new CliResponse(
+            $this->createHttpCliResponse(200, ['Location: http://example.com/x', 'X-Url: a:b:c']),
+            []
+        );
+
+        $headers = $response->getHeaders(false);
+
+        $this->assertSame(['http://example.com/x'], $headers['location']);
+        $this->assertSame(['a:b:c'], $headers['x-url']);
+    }
+
     private function createStubProcess(): Process
     {
         $process = $this->createStub(Process::class);

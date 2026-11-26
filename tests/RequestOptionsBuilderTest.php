@@ -252,6 +252,26 @@ class RequestOptionsBuilderTest extends TestCase
         $this->assertEquals($multipart, $options->multipart);
     }
 
+    public function testMultipartClearsPreviousBodyOption(): void
+    {
+        $multipart = [
+            [
+                'name' => 'field',
+                'contents' => 'value',
+            ],
+        ];
+
+        $options = (new RequestOptionsBuilder())
+            ->json([
+                'key' => 'value',
+            ])
+            ->multipart($multipart)
+            ->build();
+
+        $this->assertNull($options->json);
+        $this->assertSame($multipart, $options->multipart);
+    }
+
     // Authentication
     public function testBasicAuth(): void
     {
