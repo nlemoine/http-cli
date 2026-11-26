@@ -6,6 +6,7 @@ namespace n5s\HttpCli\Guzzle;
 
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Exception\ResponseException;
 use GuzzleHttp\Exception\TransferException;
 use GuzzleHttp\Promise as P;
 use GuzzleHttp\Promise\FulfilledPromise;
@@ -14,7 +15,6 @@ use GuzzleHttp\Psr7;
 use GuzzleHttp\Psr7\Response;
 use GuzzleHttp\RequestOptions;
 use GuzzleHttp\TransferStats;
-use GuzzleHttp\Utils;
 use n5s\HttpCli\Client;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -49,7 +49,7 @@ class CliHandler
             );
         }
 
-        $startTime = isset($options[RequestOptions::ON_STATS]) ? Utils::currentTime() : null;
+        $startTime = isset($options[RequestOptions::ON_STATS]) ? self::currentTime() : null;
 
         try {
             // Does not support the expect header.
@@ -90,7 +90,7 @@ class CliHandler
             ) {
                 $e = new ConnectException($e->getMessage(), $request, $e);
             } else {
-                $e = RequestException::wrapException($request, $e);
+                $e = new RequestException($e->getMessage(), $request, previous: $e);
             }
             $this->invokeStats($options, $request, $startTime, null, $e);
 
@@ -133,19 +133,21 @@ class CliHandler
                 '1.1', // HTTP version - CLI always simulates HTTP/1.1
                 null   // Reason phrase - let Guzzle derive from status code
             );
-        } catch (\Exception $e) {
-            return P\Create::rejectionFor(
-                new RequestException('An error was encountered while creating the response', $request, null, $e)
-            );
+        } catch (\Throwable $e) {
+            $reason = new RequestException('An error was encountered while creating the response', $request, previous: $e);
+            $this->invokeStats($options, $request, $startTime, null, $reason);
+
+            return P\Create::rejectionFor($reason);
         }
 
         if (isset($options[RequestOptions::ON_HEADERS])) {
             try {
-                $options[RequestOptions::ON_HEADERS]($response);
-            } catch (\Exception $e) {
-                return P\Create::rejectionFor(
-                    new RequestException('An error was encountered during the on_headers event', $request, $response, $e)
-                );
+                $options[RequestOptions::ON_HEADERS]($response, $request);
+            } catch (\Throwable $e) {
+                $reason = self::responseException('An error was encountered during the on_headers event', $request, $response, $e);
+                $this->invokeStats($options, $request, $startTime, $response, $reason);
+
+                return P\Create::rejectionFor($reason);
             }
         }
 
@@ -175,7 +177,7 @@ class CliHandler
             return;
         }
 
-        $stats = new TransferStats($request, $response, Utils::currentTime() - $startTime, $error, []);
+        $stats = new TransferStats($request, $response, self::currentTime() - $startTime, $error, []);
         ($options[RequestOptions::ON_STATS])($stats);
     }
 
@@ -229,7 +231,12 @@ class CliHandler
             return [$stream, $headers];
         }
 
-        $normalizedKeys = Utils::normalizeHeaderKeys($headers);
+        // Lowercase name => original name. Utils::normalizeHeaderKeys() did
+        // this but is deprecated since Guzzle 8.5.
+        $normalizedKeys = [];
+        foreach (\array_keys($headers) as $name) {
+            $normalizedKeys[\strtolower($name)] = $name;
+        }
         if (! isset($normalizedKeys['content-encoding'])) {
             return [$stream, $headers];
         }
@@ -313,5 +320,33 @@ class CliHandler
         }
 
         return $guzzleOptions;
+    }
+
+    /**
+     * Monotonic clock in seconds. Guzzle 7 exposed this as Utils::currentTime(),
+     * Guzzle 8 removed it.
+     */
+    private static function currentTime(): float
+    {
+        return \hrtime(true) / 1e9;
+    }
+
+    /**
+     * Build a response-aware request exception. Guzzle 8 moved the response
+     * from RequestException to the new ResponseException subclass.
+     */
+    private static function responseException(
+        string $message,
+        RequestInterface $request,
+        ResponseInterface $response,
+        \Throwable $previous
+    ): RequestException {
+        if (\class_exists(ResponseException::class)) {
+            return new ResponseException($message, $request, $response, $previous);
+        }
+
+        // Guzzle 7 only. Coverage is collected on a Guzzle 8 install, the
+        // lowest-dependencies CI job runs this branch.
+        return new RequestException($message, $request, $response, $previous); // @codeCoverageIgnore
     }
 }

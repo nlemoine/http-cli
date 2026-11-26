@@ -66,6 +66,8 @@ Use your favorite HTTP client library - just swap in our handler.
 composer require guzzlehttp/guzzle
 ```
 
+Guzzle 7.10+ and 8.x are supported. With Guzzle 8, a failure that carries a response (such as an exception thrown in `on_headers`) is a `GuzzleHttp\Exception\ResponseException`: catch that class to call `getResponse()`.
+
 ```php
 use GuzzleHttp\Client;
 use GuzzleHttp\HandlerStack;
