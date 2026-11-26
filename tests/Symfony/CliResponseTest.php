@@ -415,8 +415,17 @@ class CliResponseTest extends TestCase
             ]
         );
 
+        // The JSON error text depends on the PHP version (8.6 adds the
+        // location), so take it from the running PHP.
+        try {
+            json_decode('not valid json', flags: JSON_THROW_ON_ERROR);
+            $this->fail('The fixture should be invalid JSON');
+        } catch (\JsonException $e) {
+            $jsonError = $e->getMessage();
+        }
+
         $this->expectException(JsonException::class);
-        $this->expectExceptionMessage('Syntax error for "http://example.com/api".');
+        $this->expectExceptionMessage($jsonError . ' for "http://example.com/api".');
         $response->toArray(false);
     }
 
