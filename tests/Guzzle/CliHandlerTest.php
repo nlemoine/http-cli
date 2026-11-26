@@ -217,14 +217,16 @@ class CliHandlerTest extends AbstractHttpCliTestCase
         $startTime = microtime(true);
 
         $request = new Request('GET', 'http://localhost/');
+        // Well above the time it takes to spawn the PHP process, so that the
+        // request alone cannot reach the threshold
         $options = [
-            RequestOptions::DELAY => 100,
-        ]; // 100ms delay
+            RequestOptions::DELAY => 500,
+        ];
         $promise = ($handler)($request, $options);
         $promise->wait();
 
         $elapsed = (microtime(true) - $startTime) * 1000; // Convert to ms
-        $this->assertGreaterThanOrEqual(90, $elapsed, 'Request should have waited at least ~100ms');
+        $this->assertGreaterThanOrEqual(450, $elapsed, 'Request should have waited at least ~500ms');
     }
 
     public function testZeroDelayDoesNotWait(): void
@@ -1290,6 +1292,31 @@ class CliHandlerTest extends AbstractHttpCliTestCase
 
         $this->assertEquals('Content to drain', $body1);
         $this->assertEquals($body1, $body2);
+    }
+
+    public function testDefaultSinkIsRewoundAfterDrain(): void
+    {
+        $this->createTestFile('drain', '<?php echo "Content to drain";');
+        $handler = $this->createHandler('drain.php');
+
+        $response = ($handler)(new Request('GET', 'http://localhost/drain.php'))->wait();
+
+        // getContents() reads from the current position, unlike a string cast
+        $this->assertSame('Content to drain', $response->getBody()->getContents());
+    }
+
+    public function testDrainWithContentLengthKeepsTheWholeBody(): void
+    {
+        $this->createTestFile('content_length', '<?php
+            header("Content-Length: 16");
+            echo "Content to drain";
+        ');
+        $handler = $this->createHandler('content_length.php');
+
+        $response = ($handler)(new Request('GET', 'http://localhost/content_length.php'))->wait();
+
+        $this->assertSame('16', $response->getHeaderLine('Content-Length'));
+        $this->assertSame('Content to drain', (string) $response->getBody());
     }
 
     // HEAD Request Tests (no drain)

@@ -431,6 +431,44 @@ class CliClientTest extends AbstractHttpCliTestCase
         }
     }
 
+    public function testConstructorDefaultHeadersAreSent(): void
+    {
+        $this->createTestFile('headers', '<?php echo $_SERVER["HTTP_X_DEFAULT"] ?? "missing";');
+        $client = new CliClient(new Client($this->testDocumentRoot, 'headers.php'), [
+            'headers' => [
+                'X-Default' => 'from-defaults',
+            ],
+        ]);
+
+        $response = $client->request('GET', 'http://localhost/headers.php');
+
+        $this->assertSame('from-defaults', $response->getContent());
+    }
+
+    public function testGetInfoUrlIsTheRequestedUrl(): void
+    {
+        $this->createTestFile('index', '<?php echo "OK";');
+        $client = $this->createClient('index.php');
+
+        $response = $client->request('GET', 'http://localhost/index.php?a=1');
+
+        $this->assertSame('http://localhost/index.php?a=1', $response->getInfo('url'));
+    }
+
+    public function testTransportExceptionKeepsMessageAndPrevious(): void
+    {
+        $client = new CliClient(new Client($this->testDocumentRoot, null));
+
+        try {
+            $client->request('GET', 'http://localhost/');
+            $this->fail('Expected a TransportExceptionInterface');
+        } catch (TransportExceptionInterface $e) {
+            $this->assertStringContainsString('No file to execute', $e->getMessage());
+            $this->assertInstanceOf(\RuntimeException::class, $e->getPrevious());
+            $this->assertSame($e->getMessage(), $e->getPrevious()->getMessage());
+        }
+    }
+
     private function createClient(string $file = 'index.php'): CliClient
     {
         return new CliClient(new Client($this->testDocumentRoot, $file));

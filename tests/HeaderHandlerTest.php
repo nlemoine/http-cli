@@ -305,4 +305,112 @@ class HeaderHandlerTest extends TestCase
 
         HeaderHandler::getInstance();
     }
+
+    public function testBuildsExactHeaderString(): void
+    {
+        $this->handler->http_response_code(201);
+        $this->handler->header('Content-Type: application/json');
+        $this->handler->header('X-Custom: test');
+
+        $this->assertSame(
+            'HTTP/1.1 201 Created' . PHP_EOL
+            . 'Content-Type: application/json' . PHP_EOL
+            . 'X-Custom: test' . PHP_EOL
+            . PHP_EOL,
+            $this->handler->buildHeaderString()
+        );
+    }
+
+    public function testWarnsWhenAddingHeaderAfterHeadersWereSent(): void
+    {
+        $this->handler->header('X-Test: first');
+        ob_start();
+        $this->handler->outputHeaders();
+        ob_end_clean();
+
+        $warnings = $this->captureWarnings(fn () => $this->handler->header('X-Late: value'));
+
+        $this->assertCount(1, $warnings);
+        $this->assertStringStartsWith('Cannot modify header information - headers already sent', $warnings[0]);
+        $this->assertStringContainsString(' (output started at ', $warnings[0]);
+        $this->assertSame(['X-Test: first'], $this->handler->headers_list());
+    }
+
+    public function testWarnsOnHeaderWithCarriageReturnOnly(): void
+    {
+        $warnings = $this->captureWarnings(fn () => $this->handler->header("X-Test: a\rX-Injected: bad"));
+
+        $this->assertSame(['Header may not contain more than a single header, new line detected'], $warnings);
+        $this->assertSame([], $this->handler->headers_list());
+    }
+
+    public function testParsesLowercaseHttpStatusLine(): void
+    {
+        $this->handler->header('http/1.1 404 Not Found');
+
+        $this->assertSame(404, $this->handler->http_response_code());
+    }
+
+    public function testIgnoresStatusLineInsideHeaderValue(): void
+    {
+        $this->handler->header('X-Foo: HTTP/1.1 500 Oops');
+
+        $this->assertSame(200, $this->handler->http_response_code());
+        $this->assertSame(['X-Foo: HTTP/1.1 500 Oops'], $this->handler->headers_list());
+    }
+
+    public function testParsesHeaderWithoutSpaceAfterColon(): void
+    {
+        $this->handler->header('X-A:b');
+
+        $this->assertSame(['X-A: b'], $this->handler->headers_list());
+    }
+
+    public function testKeepsHeadersListIndexedAfterReplacement(): void
+    {
+        $this->handler->header('X-A: 1');
+        $this->handler->header('X-B: 2');
+        $this->handler->header('X-A: 3');
+
+        $this->assertSame(['X-B: 2', 'X-A: 3'], $this->handler->headers_list());
+    }
+
+    public function testAcceptsLowestValidResponseCode(): void
+    {
+        $previous = $this->handler->http_response_code(100);
+
+        $this->assertSame(200, $previous);
+        $this->assertSame(100, $this->handler->http_response_code());
+    }
+
+    public function testWarnsOnInvalidResponseCode(): void
+    {
+        $warnings = $this->captureWarnings(fn () => $this->handler->http_response_code(99));
+
+        $this->assertSame(['Invalid response code 99'], $warnings);
+        $this->assertSame(200, $this->handler->http_response_code());
+    }
+
+    /**
+     * Run $callback and return the E_USER_WARNING messages it triggered.
+     *
+     * @return list<string>
+     */
+    private function captureWarnings(callable $callback): array
+    {
+        $warnings = [];
+        set_error_handler(static function (int $errno, string $message) use (&$warnings): bool {
+            $warnings[] = $message;
+
+            return true;
+        }, E_USER_WARNING);
+
+        try {
+            $callback();
+        } finally {
+            restore_error_handler();
+        }
+
+        return $warnings;
+    }
 }

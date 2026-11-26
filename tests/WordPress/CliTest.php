@@ -974,6 +974,170 @@ class CliTest extends AbstractHttpCliTestCase
         $this->assertEquals('', $transport->info['content_type']);
     }
 
+    public function testRequestMultipleUsesEachRequestHeadersDataAndOptions(): void
+    {
+        $this->createTestFile('echo', '<?php echo json_encode([
+            "method" => $_SERVER["REQUEST_METHOD"],
+            "header" => $_SERVER["HTTP_X_TEST"] ?? null,
+            "input" => file_get_contents("php://input"),
+        ]);');
+        $transport = $this->createTransport('echo.php');
+
+        $requestOptions = $this->getDefaultOptions();
+        $requestOptions['type'] = Requests::POST;
+
+        $responses = $transport->request_multiple([
+            'first' => [
+                'url' => 'http://localhost/echo.php',
+                'headers' => [
+                    'X-Test' => 'per-request',
+                ],
+                'data' => 'payload',
+                'options' => $requestOptions,
+            ],
+        ], $this->getDefaultOptions());
+
+        $parts = explode("\r\n\r\n", $responses['first'], 2);
+        $this->assertSame([
+            'method' => 'POST',
+            'header' => 'per-request',
+            'input' => 'payload',
+        ], json_decode($parts[1], true));
+    }
+
+    public function testDataFormatQuerySendsPostDataAsQueryParameters(): void
+    {
+        $this->createTestFile('echo', '<?php echo json_encode([
+            "get" => $_GET,
+            "input" => file_get_contents("php://input"),
+        ]);');
+        $transport = $this->createTransport('echo.php');
+
+        $options = $this->getDefaultOptions();
+        $options['type'] = Requests::POST;
+        $options['data_format'] = 'query';
+
+        $response = $transport->request('http://localhost/echo.php', [], [
+            'foo' => 'bar',
+        ], $options);
+
+        $parts = explode("\r\n\r\n", $response, 2);
+        $this->assertSame([
+            'get' => [
+                'foo' => 'bar',
+            ],
+            'input' => '',
+        ], json_decode($parts[1], true));
+    }
+
+    public function testGetArrayDataIsSentAsQueryParameters(): void
+    {
+        $this->createTestFile('echo', '<?php echo json_encode([
+            "get" => $_GET,
+            "input" => file_get_contents("php://input"),
+        ]);');
+        $transport = $this->createTransport('echo.php');
+
+        $response = $transport->request('http://localhost/echo.php', [], [
+            'foo' => 'bar',
+        ], $this->getDefaultOptions());
+
+        $parts = explode("\r\n\r\n", $response, 2);
+        $this->assertSame([
+            'get' => [
+                'foo' => 'bar',
+            ],
+            'input' => '',
+        ], json_decode($parts[1], true));
+    }
+
+    public function testLowercaseGetTypeSendsArrayDataAsQueryParameters(): void
+    {
+        $this->createTestFile('echo', '<?php echo json_encode([
+            "get" => $_GET,
+            "input" => file_get_contents("php://input"),
+        ]);');
+        $transport = $this->createTransport('echo.php');
+
+        $options = $this->getDefaultOptions();
+        $options['type'] = 'get';
+
+        $response = $transport->request('http://localhost/echo.php', [], [
+            'foo' => 'bar',
+        ], $options);
+
+        $parts = explode("\r\n\r\n", $response, 2);
+        $this->assertSame([
+            'get' => [
+                'foo' => 'bar',
+            ],
+            'input' => '',
+        ], json_decode($parts[1], true));
+    }
+
+    public function testArrayDataWithLowercaseJsonContentTypeIsSentAsJson(): void
+    {
+        $this->createTestFile('rawbody', '<?php echo file_get_contents("php://input");');
+        $transport = $this->createTransport('rawbody.php');
+
+        $options = $this->getDefaultOptions();
+        $options['type'] = Requests::POST;
+
+        $response = $transport->request('http://localhost/rawbody.php', [
+            'content-type' => 'application/json',
+        ], [
+            'key' => 'value',
+        ], $options);
+
+        $parts = explode("\r\n\r\n", $response, 2);
+        $this->assertSame('{"key":"value"}', $parts[1]);
+    }
+
+    public function testMaxBytesKeepsTheFirstBytes(): void
+    {
+        $this->createTestFile('alphabet', '<?php echo "abcdefghij";');
+        $transport = $this->createTransport('alphabet.php');
+
+        $options = $this->getDefaultOptions();
+        $options['max_bytes'] = 3;
+
+        $response = $transport->request('http://localhost/alphabet.php', [], [], $options);
+
+        $parts = explode("\r\n\r\n", $response, 2);
+        $this->assertSame('abc', $parts[1]);
+    }
+
+    public function testTotalTimeIsAShortDuration(): void
+    {
+        $this->createTestFile('index', '<?php echo "OK";');
+        $transport = $this->createTransport('index.php');
+
+        $transport->request('http://localhost/', [], [], $this->getDefaultOptions());
+
+        $this->assertGreaterThanOrEqual(0, $transport->info['total_time']);
+        $this->assertLessThan(60, $transport->info['total_time']);
+    }
+
+    public function testRedirectLimitIsPassedToTheClient(): void
+    {
+        $this->createTestFile('index', '<?php echo "OK";');
+        $transport = $this->createTransport('index.php');
+
+        $capturedMaxRedirects = null;
+        $hooks = new Hooks();
+        $hooks->register('cli.before_send', function (&$url, &$method, &$requestOptions) use (&$capturedMaxRedirects): void {
+            $capturedMaxRedirects = $requestOptions->maxRedirects;
+        });
+
+        $options = $this->getDefaultOptions();
+        $options['redirects'] = 3;
+        $options['hooks'] = $hooks;
+
+        $transport->request('http://localhost/', [], [], $options);
+
+        $this->assertSame(3, $capturedMaxRedirects);
+    }
+
     private function createTransport(string $file = 'index.php'): Cli
     {
         return new Cli(new Client($this->testDocumentRoot, $file));

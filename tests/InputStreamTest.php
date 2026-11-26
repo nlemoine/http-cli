@@ -725,6 +725,103 @@ class InputStreamTest extends TestCase
         fclose($handle);
     }
 
+    public function testSuccessiveWritesToMemoryAppend(): void
+    {
+        InputStream::register();
+
+        $handle = fopen('php://memory', 'r+');
+        fwrite($handle, 'abc');
+        fwrite($handle, 'de');
+        fwrite($handle, 'f');
+
+        rewind($handle);
+        $this->assertSame('abcdef', fread($handle, 100));
+
+        fclose($handle);
+    }
+
+    public function testReadingMemoryFromOffsetReachesEnd(): void
+    {
+        InputStream::register();
+
+        $handle = fopen('php://memory', 'r+');
+        fwrite($handle, '0123456789');
+        fseek($handle, 2);
+
+        $this->assertSame('23456789', fread($handle, 100));
+        $this->assertSame('', fread($handle, 100));
+
+        fclose($handle);
+    }
+
+    // fseek() turns SEEK_CUR into SEEK_SET before calling the wrapper,
+    // so the SEEK_CUR handling is only reachable by calling it directly.
+    public function testWrapperSeeksInputRelativeToCurrentPosition(): void
+    {
+        InputStream::setRawInput('0123456789');
+        $stream = $this->openWrapper('php://input');
+        $stream->stream_seek(3, SEEK_SET);
+
+        $this->assertTrue($stream->stream_seek(2, SEEK_CUR));
+        $this->assertSame(5, $stream->stream_tell());
+    }
+
+    public function testWrapperSeeksMemoryRelativeToCurrentPosition(): void
+    {
+        $stream = $this->openWrapper('php://memory');
+        $stream->stream_write('0123456789');
+        $stream->stream_seek(3, SEEK_SET);
+
+        $this->assertTrue($stream->stream_seek(2, SEEK_CUR));
+        $this->assertSame(5, $stream->stream_tell());
+    }
+
+    public function testSeekInputToStart(): void
+    {
+        InputStream::register();
+        InputStream::setRawInput('test');
+
+        $handle = fopen('php://input', 'r');
+
+        $this->assertSame(0, fseek($handle, 0, SEEK_SET));
+
+        fclose($handle);
+    }
+
+    public function testSeekInputToExactEnd(): void
+    {
+        InputStream::register();
+        InputStream::setRawInput('test');
+
+        $handle = fopen('php://input', 'r');
+
+        $this->assertSame(-1, fseek($handle, 5, SEEK_SET));
+        $this->assertSame(0, fseek($handle, 4, SEEK_SET));
+
+        fclose($handle);
+    }
+
+    public function testRejectsUnknownPhpPath(): void
+    {
+        InputStream::register();
+
+        $handle = @fopen('php://unknown', 'r');
+
+        $this->assertFalse($handle);
+    }
+
+    public function testInputStillReadableAfterOpeningStdout(): void
+    {
+        InputStream::register();
+        InputStream::setRawInput('test data');
+
+        // Opening php://stdout briefly restores the native php:// wrapper
+        $handle = fopen('php://stdout', 'w');
+        fclose($handle);
+
+        $this->assertSame('test data', file_get_contents('php://input'));
+    }
+
     // php://input tell
     public function testInputTell(): void
     {
@@ -741,5 +838,14 @@ class InputStreamTest extends TestCase
         $this->assertEquals(8, ftell($handle));
 
         fclose($handle);
+    }
+
+    private function openWrapper(string $path): InputStream
+    {
+        $stream = new InputStream();
+        $openedPath = null;
+        $this->assertTrue($stream->stream_open($path, 'r+', 0, $openedPath));
+
+        return $stream;
     }
 }

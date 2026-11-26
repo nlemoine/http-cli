@@ -162,6 +162,60 @@ class SymfonyToRequestOptionsAdapterTest extends TestCase
         $this->assertNull($result->body);
     }
 
+    public function testTransformFormBodyWithKeyValueContentTypeBecomesFormParams(): void
+    {
+        $result = $this->adapter->transform([
+            'headers' => [
+                'Content-Type' => 'application/x-www-form-urlencoded',
+            ],
+            'body' => 'a=1&b=2',
+        ]);
+
+        $this->assertSame([
+            'a' => '1',
+            'b' => '2',
+        ], $result->formParams);
+        $this->assertNull($result->body);
+    }
+
+    public function testTransformFormBodyWithListContentTypeBecomesFormParams(): void
+    {
+        $result = $this->adapter->transform([
+            'headers' => ['Content-Type: application/x-www-form-urlencoded'],
+            'body' => 'a=1&b=2',
+        ]);
+
+        $this->assertSame([
+            'a' => '1',
+            'b' => '2',
+        ], $result->formParams);
+        $this->assertNull($result->body);
+    }
+
+    public function testTransformListHeaderWithoutSpaceAfterColon(): void
+    {
+        $result = $this->adapter->transform([
+            'headers' => ['X-A:b'],
+        ]);
+
+        $this->assertSame('b', $result->headers['X-A']);
+    }
+
+    public function testTransformLowercaseCookieHeaderBecomesCookies(): void
+    {
+        $result = $this->adapter->transform([
+            'headers' => [
+                'cookie' => 'a = 1; b=2',
+            ],
+        ]);
+
+        $this->assertSame([
+            'a' => '1',
+            'b' => '2',
+        ], $result->cookies);
+        $this->assertArrayNotHasKey('cookie', $result->headers);
+    }
+
     // JSON Tests
     public function testTransformJson(): void
     {

@@ -71,7 +71,7 @@ final class GuzzleToRequestOptionsAdapterTest extends TestCase
     public function testTransformTimeoutInvalid(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('Timeout must be a non-negative number');
+        $this->expectExceptionMessage('Timeout must be a non-negative number, got: integer');
 
         $this->adapter->transform([
             GuzzleOptions::TIMEOUT => -1,
@@ -304,6 +304,18 @@ final class GuzzleToRequestOptionsAdapterTest extends TestCase
         ]);
     }
 
+    public function testTransformMultipartPartWithoutName(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage("Each multipart element must have 'name' and 'contents' keys");
+
+        $this->adapter->transform([
+            GuzzleOptions::MULTIPART => [[
+                'contents' => 'value1',
+            ]],
+        ]);
+    }
+
     public function testTransformBasicAuth(): void
     {
         $auth = ['username', 'password'];
@@ -414,6 +426,17 @@ final class GuzzleToRequestOptionsAdapterTest extends TestCase
         $this->assertSame($redirectConfig, $result->extras['guzzle_redirect_config']);
     }
 
+    public function testTransformAllowRedirectsArrayWithoutMaxUsesGuzzleDefault(): void
+    {
+        $result = $this->adapter->transform([
+            GuzzleOptions::ALLOW_REDIRECTS => [
+                'strict' => true,
+            ],
+        ]);
+
+        $this->assertSame(5, $result->maxRedirects);
+    }
+
     public function testTransformHttpVersionIsInternal(): void
     {
         // VERSION is handled directly by CliHandler, not the adapter
@@ -463,6 +486,7 @@ final class GuzzleToRequestOptionsAdapterTest extends TestCase
 
         // Should be ignored (no cookies set)
         $this->assertEmpty($result->cookies);
+        $this->assertSame([], $result->extras);
     }
 
     public function testTransformCookiesWithBooleanFalse(): void
@@ -514,6 +538,7 @@ final class GuzzleToRequestOptionsAdapterTest extends TestCase
         ];
 
         $this->assertSame($expected, $result->cookies);
+        $this->assertSame([], $result->extras);
     }
 
     public function testTransformCookiesWithEmptyCookieJar(): void
