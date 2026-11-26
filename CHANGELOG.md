@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.2.0](https://github.com/nlemoine/http-cli/compare/1.1.2...1.2.0) (2026-11-26)
+
+
+### Features
+
+* support Guzzle 8 ([#10](https://github.com/nlemoine/http-cli/issues/10)) ([a59256a](https://github.com/nlemoine/http-cli/commit/a59256a3dd18426518a4a26fd22334ba53e89925))
+
+
+### Bug Fixes
+
+* accept a float delay in the Guzzle handler ([4bbd65c](https://github.com/nlemoine/http-cli/commit/4bbd65cc2bdda19300fd38d27d4aa5c775d7b047))
+* accept the options a Guzzle client passes to the handler ([5dbf01c](https://github.com/nlemoine/http-cli/commit/5dbf01c43dea3f2a8e601bbabe9562e39fb5a537))
+* align the Guzzle handler with Guzzle 8 on three edge cases ([0ddadb6](https://github.com/nlemoine/http-cli/commit/0ddadb6e01acd751fc4c3ad28d9016dbd13a8a83))
+* build $_REQUEST in the script's PHP process, as PHP does ([45c7441](https://github.com/nlemoine/http-cli/commit/45c74419ba3fe9423c5d595facadf6fcd2f3c369))
+* follow PHP when request_order is set but empty ([e5982db](https://github.com/nlemoine/http-cli/commit/e5982dbf1673e1f76a3326ac5aaa54fb8252ccea))
+* implement the session ID interfaces for PHP 8.6 ([35a99a8](https://github.com/nlemoine/http-cli/commit/35a99a896af118d8a65568c06772be3af8c350cf))
+* keep the whole decoded body when the response is gzipped ([6055480](https://github.com/nlemoine/http-cli/commit/6055480e3354a3c4dcc96ab764298a564f6c19c9))
+* make multipart file uploads work ([2cde307](https://github.com/nlemoine/http-cli/commit/2cde3078f9c7e0a74b3713781f24351972823cee))
+* reject with a Guzzle transfer failure as is ([38c1dca](https://github.com/nlemoine/http-cli/commit/38c1dcad0c50b561d370ce3f5e60a2bfe8223f47))
+* set the superglobals by name so $_ENV reaches the script ([fbabd0f](https://github.com/nlemoine/http-cli/commit/fbabd0ff1c4ce7881f2de9fe9254482358bcb638))
+
+
+### Miscellaneous Chores
+
+* add GitHub Sponsors to composer funding ([efc49af](https://github.com/nlemoine/http-cli/commit/efc49af317476e9a15f9300e6a724c3659252ba0))
+* Add README badges ([05bc01b](https://github.com/nlemoine/http-cli/commit/05bc01b978418b7aba526424b6b283fba80b16ef))
+* update PHP QA workflow reference to latest commit ([f32388c](https://github.com/nlemoine/http-cli/commit/f32388c189075170edd1424f51910031903e4633))
+* update PHP QA workflow reference to latest version ([9766f77](https://github.com/nlemoine/http-cli/commit/9766f77f4349e0f807746bc7e8468d2cdb5fb832))
+* validate phpunit.xml.dist against the installed PHPUnit schema ([7907d3a](https://github.com/nlemoine/http-cli/commit/7907d3a202af6f66683e08c035b5e2f51063d34a))
+
 ## [1.1.2](https://github.com/nlemoine/http-cli/compare/1.1.1...1.1.2) (2026-11-06)
 
 
