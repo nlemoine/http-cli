@@ -6,6 +6,7 @@ namespace n5s\HttpCli\Tests;
 
 use n5s\HttpCli\Runtime\InputStream;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Process\Process;
 
 /**
  * Tests for InputStream stream wrapper
@@ -252,15 +253,20 @@ class InputStreamTest extends TestCase
 
     public function testPhpStderrStillWorks(): void
     {
-        InputStream::register();
+        // Written from a child process: the test runner's own stderr must
+        // stay clean, Infection stops the suite on the first stderr output.
+        $script = <<<'PHP'
+            require $argv[1];
+            n5s\HttpCli\Runtime\InputStream::register();
+            $handle = fopen('php://stderr', 'w');
+            echo $handle === false ? 'open failed' : fwrite($handle, 'stderr test');
+            PHP;
 
-        $handle = fopen('php://stderr', 'w');
-        $this->assertNotFalse($handle, 'php://stderr should be openable after registration');
+        $process = new Process([PHP_BINARY, '-r', $script, dirname(__DIR__) . '/vendor/autoload.php']);
+        $process->mustRun();
 
-        $bytesWritten = fwrite($handle, 'stderr test');
-        $this->assertEquals(11, $bytesWritten);
-
-        fclose($handle);
+        $this->assertSame('11', $process->getOutput());
+        $this->assertSame('stderr test', $process->getErrorOutput());
     }
 
     public function testPhpMemorySeekAndTell(): void
