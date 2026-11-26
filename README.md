@@ -50,7 +50,7 @@ $response = $client->request('POST', '/login',
 When you make a request, the library:
 
 1. Spawns a PHP CLI process targeting your script
-2. Injects a bootstrap that populates `$_GET`, `$_POST`, `$_SERVER`, `$_COOKIE`, and `$_SESSION`
+2. Injects a bootstrap that populates `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_SERVER`, `$_ENV`, `$_REQUEST` and `$_SESSION`
 3. Provides polyfills for specific HTTP context functions: `header()`, `headers_sent()`, `http_response_code()`, etc.
 4. Captures the output and headers, returning a `Response` object
 
@@ -181,7 +181,7 @@ $client = new Client(
 
 ### Globals Handler
 
-By default, the child PHP process receives a clean set of superglobals built from the HTTP request only. If your application depends on environment variables from the parent process (e.g. `APP_ENV`, `DATABASE_URL`), you can use the built-in `InheritEnvGlobalsHandler`:
+By default, the child PHP process receives a clean set of superglobals built from the HTTP request only. `$_ENV` is empty, whatever `variables_order` the PHP binary uses. The environment variables of the parent process are still readable with `getenv()`. If your application depends on environment variables from the parent process (e.g. `APP_ENV`, `DATABASE_URL`), you can use the built-in `InheritEnvGlobalsHandler`:
 
 ```php
 use n5s\HttpCli\Client;
@@ -193,7 +193,7 @@ $client = new Client(
 );
 ```
 
-This merges the parent's `$_SERVER` and `$_ENV` into the child process. Request-specific variables take precedence over inherited ones. Variables that describe a request, such as `HTTP_*`, `PHP_AUTH_*`, `HTTPS` or `REMOTE_ADDR`, are never inherited: when the parent process is itself handling a request, under PHP-FPM for example, its headers and credentials don't reach the script.
+This merges the parent's `$_SERVER` and `$_ENV` arrays into the child process. It copies these arrays, not `getenv()`: when the parent runs with `variables_order=GPCS` (the value of the `php.ini` files PHP ships), its `$_ENV` only holds what code put there, a Dotenv loader or PHPUnit `<env>` for example, while `$_SERVER` holds the whole environment in CLI. Request-specific variables take precedence over inherited ones. Variables that describe a request, such as `HTTP_*`, `PHP_AUTH_*`, `HTTPS` or `REMOTE_ADDR`, are never inherited: when the parent process is itself handling a request, under PHP-FPM for example, its headers and credentials don't reach the script.
 
 You can also implement the `GlobalsHandler` interface to customize superglobals however you need:
 
@@ -309,6 +309,7 @@ Running PHP scripts via CLI instead of a web server comes with inherent limitati
 - **File uploads**: Multipart parts are written to temp files and populated in `$_FILES`
 - **Session handling**: Works but uses an in-memory handler, not file-based persistence
 - **`php://input`**: Custom stream wrapper provides the request body
+- **`filter_input()`**: `filter_input()`, `filter_input_array()` and `filter_has_var()` read what PHP itself received, not the superglobals the library sets, so they find nothing. Read the superglobals instead.
 
 ## License
 

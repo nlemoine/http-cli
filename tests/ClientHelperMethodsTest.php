@@ -6,6 +6,7 @@ namespace n5s\HttpCli\Tests;
 
 use n5s\HttpCli\Client;
 use n5s\HttpCli\GlobalsHandler;
+use n5s\HttpCli\RequestOptions;
 use ReflectionClass;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\Request;
@@ -220,6 +221,41 @@ class ClientHelperMethodsTest extends AbstractHttpCliTestCase
         $data = json_decode($response->getContent(), true);
 
         $this->assertEquals('test_value', $data['server']);
+    }
+
+    public function testEnvFromGlobalsHandlerReachesTheScript(): void
+    {
+        $this->createTestFile('env_handler', '<?php echo json_encode($_ENV["MY_ENV_VAR"] ?? null);');
+
+        $handler = new class() implements GlobalsHandler {
+            public function handle(array &$globals): void
+            {
+                $globals['_ENV']['MY_ENV_VAR'] = 'env_value';
+            }
+        };
+        $client = new Client($this->testDocumentRoot, 'env_handler.php', $handler);
+
+        $response = $client->request('GET', 'http://localhost/env_handler.php');
+
+        $this->assertSame('env_value', json_decode($response->getContent(), true));
+    }
+
+    public function testRequestSuperglobalReachesTheScript(): void
+    {
+        $this->createTestFile('request_global', '<?php echo json_encode($_REQUEST);');
+
+        $response = (new Client($this->testDocumentRoot))->request(
+            'POST',
+            'http://localhost/request_global.php?from_query=1',
+            RequestOptions::create()->formParams([
+                'from_post' => '2',
+            ])->build()
+        );
+
+        $this->assertSame([
+            'from_query' => '1',
+            'from_post' => '2',
+        ], json_decode($response->getContent(), true));
     }
 
     public function testUnserializableGlobalsThrow(): void
