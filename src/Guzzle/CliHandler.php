@@ -345,6 +345,8 @@ class CliHandler
             return new ResponseException($message, $request, $response, $previous);
         }
 
-        return new RequestException($message, $request, $response, $previous);
+        // Guzzle 7 only. Coverage is collected on a Guzzle 8 install, the
+        // lowest-dependencies CI job runs this branch.
+        return new RequestException($message, $request, $response, $previous); // @codeCoverageIgnore
     }
 }

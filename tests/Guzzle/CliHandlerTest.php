@@ -424,6 +424,32 @@ class CliHandlerTest extends AbstractHttpCliTestCase
         }
     }
 
+    public function testInvalidResponseRejectsAndReportsStats(): void
+    {
+        // The runtime keeps this header, but PSR-7 rejects the name
+        $this->createTestFile('index', '<?php header("Bad(Name): x"); echo "OK";');
+        $handler = $this->createHandler('index.php');
+
+        $stats = null;
+        $request = new Request('GET', 'http://localhost/');
+        $options = [
+            RequestOptions::ON_STATS => function (TransferStats $transferStats) use (&$stats): void {
+                $stats = $transferStats;
+            },
+        ];
+
+        try {
+            ($handler)($request, $options)->wait();
+            $this->fail('The promise should be rejected');
+        } catch (RequestException $e) {
+            $this->assertSame('An error was encountered while creating the response', $e->getMessage());
+            $this->assertInstanceOf(\InvalidArgumentException::class, $e->getPrevious());
+            $this->assertInstanceOf(TransferStats::class, $stats);
+            $this->assertSame($e, $stats->getHandlerErrorData());
+            $this->assertNull($stats->getResponse());
+        }
+    }
+
     // Authentication Tests
     public function testBasicAuthHeader(): void
     {
