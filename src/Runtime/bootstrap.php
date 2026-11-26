@@ -43,7 +43,13 @@ use n5s\HttpCli\Runtime\SessionHandler;
     $_ENV = $httpCliClientVars['_ENV'] ?? [];
     // Built from this process's ini, as PHP would, unless a globals handler set it
     require_once __DIR__ . '/RequestSuperglobal.php';
-    $_REQUEST = $httpCliClientVars['_REQUEST'] ?? RequestSuperglobal::build($_GET, $_POST, $_COOKIE, RequestSuperglobal::order());
+    $_REQUEST = $httpCliClientVars['_REQUEST'] ?? RequestSuperglobal::build(
+        // A globals handler may have broken the documented shape
+        \is_array($httpCliClientVars['_GET'] ?? null) ? $httpCliClientVars['_GET'] : [],
+        \is_array($httpCliClientVars['_POST'] ?? null) ? $httpCliClientVars['_POST'] : [],
+        \is_array($httpCliClientVars['_COOKIE'] ?? null) ? $httpCliClientVars['_COOKIE'] : [],
+        RequestSuperglobal::order()
+    );
     $_SESSION = $httpCliClientVars['_SESSION'] ?? [];
 
     require __DIR__ . '/functions.php';

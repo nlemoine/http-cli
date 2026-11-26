@@ -7,7 +7,6 @@ namespace n5s\HttpCli\Tests;
 use n5s\HttpCli\Client;
 use n5s\HttpCli\GlobalsHandler;
 use n5s\HttpCli\RequestOptions;
-use n5s\HttpCli\Runtime\RequestSuperglobal;
 use ReflectionClass;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\Request;
@@ -141,28 +140,20 @@ class ClientHelperMethodsTest extends AbstractHttpCliTestCase
         $client = new Client($this->testDocumentRoot, 'test.php', $handler);
         $method = (new ReflectionClass($client))->getMethod('getGlobals');
 
-        // Create request with overlapping parameter names
-        $request = Request::create(
-            'http://localhost/test.php?name=get_value',
-            'POST',
-            [
-                'name' => 'post_value',
-            ],
-            [
-                'name' => 'cookie_value',
-            ]
-        );
+        $request = Request::create('http://localhost/test.php?from_get=1', 'POST', [
+            'from_post' => '2',
+        ]);
 
         $globals = $method->invoke($client, $request);
 
-        $this->assertSame(RequestSuperglobal::build($globals['_GET'], $globals['_POST'], $globals['_COOKIE'], RequestSuperglobal::order()), $handler->request);
+        // Built in this process, so with the request_order of the test runner, which every php.ini PHP ships and
+        // PHP's own default set to include GET and POST (assertEquals ignores the key order)
+        $this->assertEquals([
+            'from_get' => '1',
+            'from_post' => '2',
+        ], $handler->request);
         // Not sent, since the handler left it unchanged
         $this->assertArrayNotHasKey('_REQUEST', $globals);
-
-        // Verify individual arrays are correct
-        $this->assertEquals('get_value', $globals['_GET']['name']);
-        $this->assertEquals('post_value', $globals['_POST']['name']);
-        $this->assertEquals('cookie_value', $globals['_COOKIE']['name']);
     }
 
     /**
@@ -250,7 +241,8 @@ class ClientHelperMethodsTest extends AbstractHttpCliTestCase
     {
         $this->createTestFile('request_global', '<?php echo json_encode($_REQUEST);');
 
-        $response = (new Client($this->testDocumentRoot))->request(
+        $client = new Client($this->testDocumentRoot, phpExecutable: $this->phpWithIni('-d request_order=GP'));
+        $response = $client->request(
             'POST',
             'http://localhost/request_global.php?from_query=1',
             RequestOptions::create()->formParams([

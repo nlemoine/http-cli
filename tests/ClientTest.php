@@ -1951,7 +1951,7 @@ class ClientTest extends AbstractHttpCliTestCase
             "request" => $_REQUEST,
         ]');
 
-        $client = new Client(documentRoot: $this->testDocumentRoot, file: $testFile);
+        $client = new Client(documentRoot: $this->testDocumentRoot, file: $testFile, phpExecutable: $this->phpWithIni('-d request_order=GP'));
         $options = RequestOptions::create()
             ->query([
                 'get_param' => 'get_value',
@@ -1981,9 +1981,10 @@ class ClientTest extends AbstractHttpCliTestCase
         $this->assertArrayHasKey('post_param', $decoded['post']);
         $this->assertEquals('post_value', $decoded['post']['post_param']);
 
-        // Verify $_REQUEST contains both (based on request_order)
-        $this->assertArrayHasKey('get_param', $decoded['request']);
-        $this->assertArrayHasKey('post_param', $decoded['request']);
+        // Verify $_REQUEST contains both (request_order=GP)
+        $this->assertSame('get_value', $decoded['request']['get_param']);
+        $this->assertSame('url_value', $decoded['request']['url_param']);
+        $this->assertSame('post_value', $decoded['request']['post_param']);
     }
 
     public function testRequestPrecedenceInRequestArray(): void
@@ -1994,7 +1995,7 @@ class ClientTest extends AbstractHttpCliTestCase
             "request" => $_REQUEST,
         ]');
 
-        $client = new Client(documentRoot: $this->testDocumentRoot, file: $testFile);
+        $client = new Client(documentRoot: $this->testDocumentRoot, file: $testFile, phpExecutable: $this->phpWithIni('-d request_order=GP'));
         $options = RequestOptions::create()
             ->query([
                 'key' => 'from_get',
@@ -2018,9 +2019,8 @@ class ClientTest extends AbstractHttpCliTestCase
         $this->assertEquals('from_get', $decoded['get']['key']);
         $this->assertEquals('from_post', $decoded['post']['key']);
 
-        // $_REQUEST should have one of them (based on request_order setting)
-        $this->assertArrayHasKey('key', $decoded['request']);
-        $this->assertContains($decoded['request']['key'], ['from_get', 'from_post']);
+        // With request_order=GP, POST comes last and wins
+        $this->assertSame('from_post', $decoded['request']['key']);
     }
 
     public function testPostDataWithoutContentType(): void

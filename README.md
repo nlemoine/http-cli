@@ -195,7 +195,7 @@ $client = new Client(
 
 This merges the parent's `$_SERVER` and `$_ENV` arrays into the child process. It copies these arrays, not `getenv()`: when the parent runs with `variables_order=GPCS` (the value of the `php.ini` files PHP ships), its `$_ENV` only holds what code put there, a Dotenv loader or PHPUnit `<env>` for example, while `$_SERVER` holds the whole environment in CLI. Request-specific variables take precedence over inherited ones. Variables that describe a request, such as `HTTP_*`, `PHP_AUTH_*`, `HTTPS` or `REMOTE_ADDR`, are never inherited: when the parent process is itself handling a request, under PHP-FPM for example, its headers and credentials don't reach the script.
 
-You can also implement the `GlobalsHandler` interface to customize superglobals however you need. The script gets the arrays as the handler leaves them. `$_REQUEST` is the exception: the script's PHP process builds it from `$_GET`, `$_POST` and `$_COOKIE` with its own `request_order`, unless the handler changes `_REQUEST` itself.
+You can also implement the `GlobalsHandler` interface to customize superglobals however you need. The script gets the arrays as the handler leaves them, and only the keys shown in the interface: other keys added to the array are ignored. `$_REQUEST` is the exception: the script's PHP process builds it from `$_GET`, `$_POST` and `$_COOKIE` with its own `request_order`, unless the handler changes `_REQUEST` itself.
 
 ```php
 use n5s\HttpCli\GlobalsHandler;
@@ -309,7 +309,7 @@ Running PHP scripts via CLI instead of a web server comes with inherent limitati
 - **File uploads**: Multipart parts are written to temp files and populated in `$_FILES`
 - **Session handling**: Works but uses an in-memory handler, not file-based persistence
 - **`php://input`**: Custom stream wrapper provides the request body
-- **`filter_input()`**: `filter_input()`, `filter_input_array()` and `filter_has_var()` read what PHP itself received, not the superglobals the library sets, so they find nothing. Read the superglobals instead.
+- **`filter_input()`**: `filter_input()`, `filter_input_array()` and `filter_has_var()` read what the PHP CLI process itself received, not the superglobals the library sets. They find nothing for `INPUT_GET`, `INPUT_POST` and `INPUT_COOKIE`, the process environment for `INPUT_ENV` when `variables_order` contains `E`, and the CLI's own values for `INPUT_SERVER`. Read the superglobals instead.
 
 ## License
 
