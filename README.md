@@ -1,5 +1,11 @@
 # HTTP CLI
 
+[![Latest Version](https://img.shields.io/github/release/nlemoine/http-cli.svg?style=flat-square)](https://github.com/nlemoine/http-cli/releases)
+[![Software License](https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat-square)](https://github.com/nlemoine/http-cli/blob/main/LICENSE)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/nlemoine/http-cli/qa.yml?style=flat-square&branch=main)](https://github.com/nlemoine/http-cli/actions/workflows/qa.yml?query=branch%3Amain++)
+[![Code Coverage](https://img.shields.io/codecov/c/github/nlemoine/http-cli/main?style=flat-square)](https://app.codecov.io/gh/nlemoine/http-cli/)
+[![Total Downloads](https://img.shields.io/packagist/dt/n5s/http-cli.svg?style=flat-square)](https://packagist.org/packages/n5s/http-cli)
+
 Serverless HTTP client - make requests to PHP scripts on the CLI.
 
 This library lets you make HTTP requests to PHP applications without running a web server. Instead of Apache or nginx, it executes your PHP scripts directly via the command line while emulating the full HTTP environment (`$_GET`, `$_POST`, `$_SERVER`, `$_SESSION`, headers, cookies, etc.).
