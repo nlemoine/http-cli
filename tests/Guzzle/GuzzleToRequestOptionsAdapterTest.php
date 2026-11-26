@@ -588,6 +588,25 @@ final class GuzzleToRequestOptionsAdapterTest extends TestCase
         ]);
     }
 
+    public function testTransformSkipsClientConfiguration(): void
+    {
+        $result = $this->adapter->transform([
+            'handler' => static fn () => null,
+            'base_uri' => 'http://localhost/',
+            'protocols' => ['http', 'https'],
+            'request_factory' => new \stdClass(),
+            'response_factory' => new \stdClass(),
+            'stream_factory' => new \stdClass(),
+            'uri_factory' => new \stdClass(),
+            '__redirect_count' => 1,
+            '_conditional' => [],
+            GuzzleOptions::TIMEOUT => 5,
+        ]);
+
+        $this->assertSame(5.0, $result->timeout);
+        $this->assertEmpty($result->extras);
+    }
+
     public function testTransformWithTypeValidationErrors(): void
     {
         $this->expectException(InvalidArgumentException::class);

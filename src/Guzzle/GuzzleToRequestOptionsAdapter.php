@@ -76,6 +76,22 @@ final readonly class GuzzleToRequestOptionsAdapter implements OptionsAdapterInte
     ];
 
     /**
+     * Client configuration that GuzzleHttp\Client merges into the options of
+     * every request. It drives the client itself and means nothing to the
+     * handler, so it is skipped. String literals because some constants only
+     * exist in Guzzle 8.
+     */
+    private const CLIENT_OPTIONS = [
+        'handler',
+        'base_uri',
+        'protocols',
+        'request_factory',
+        'response_factory',
+        'stream_factory',
+        'uri_factory',
+    ];
+
+    /**
      * Cache for supported options (performance optimization)
      *
      * @var list<string>
@@ -108,6 +124,10 @@ final readonly class GuzzleToRequestOptionsAdapter implements OptionsAdapterInte
         $extras = [];
 
         foreach ($libraryOptions as $optionName => $optionValue) {
+            if (self::isClientOption($optionName)) {
+                continue;
+            }
+
             if (isset(self::OPTION_HANDLERS[$optionName])) {
                 $handler = self::OPTION_HANDLERS[$optionName];
                 $this->{$handler}($builder, $optionValue, $optionName);
@@ -162,6 +182,16 @@ final readonly class GuzzleToRequestOptionsAdapter implements OptionsAdapterInte
             self::CALLBACK_OPTIONS,
             self::INTERNAL_OPTIONS
         );
+    }
+
+    /**
+     * Client configuration, or Guzzle's internal bookkeeping (keys starting
+     * with an underscore, such as __redirect_count).
+     */
+    private static function isClientOption(string $optionName): bool
+    {
+        return str_starts_with($optionName, '_')
+            || in_array($optionName, self::CLIENT_OPTIONS, true);
     }
 
     /**
