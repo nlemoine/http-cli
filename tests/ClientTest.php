@@ -1982,9 +1982,8 @@ class ClientTest extends AbstractHttpCliTestCase
         $this->assertEquals('post_value', $decoded['post']['post_param']);
 
         // Verify $_REQUEST contains both (based on request_order)
-        // Note: $_REQUEST behavior in CLI+prepend context needs further investigation
-        // $this->assertArrayHasKey('get_param', $decoded['request']);
-        // $this->assertArrayHasKey('post_param', $decoded['request']);
+        $this->assertArrayHasKey('get_param', $decoded['request']);
+        $this->assertArrayHasKey('post_param', $decoded['request']);
     }
 
     public function testRequestPrecedenceInRequestArray(): void
@@ -2020,9 +2019,8 @@ class ClientTest extends AbstractHttpCliTestCase
         $this->assertEquals('from_post', $decoded['post']['key']);
 
         // $_REQUEST should have one of them (based on request_order setting)
-        // Note: $_REQUEST behavior in CLI+prepend context needs further investigation
-        // $this->assertArrayHasKey('key', $decoded['request']);
-        // $this->assertContains($decoded['request']['key'], ['from_get', 'from_post']);
+        $this->assertArrayHasKey('key', $decoded['request']);
+        $this->assertContains($decoded['request']['key'], ['from_get', 'from_post']);
     }
 
     public function testPostDataWithoutContentType(): void

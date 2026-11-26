@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace n5s\HttpCli;
 
 use Exception;
+use n5s\HttpCli\Runtime\RequestSuperglobal;
 use RuntimeException;
 use stdClass;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
@@ -383,7 +384,7 @@ final class Client
      *     _SESSION: array<string, mixed>,
      *     _SERVER: array<string, mixed>,
      *     _RAW_INPUT: string,
-     *     _REQUEST: array<string, mixed>,
+     *     _REQUEST?: array<mixed>,
      * }
      */
     private function getGlobals(Request $request, array $sessionData = []): array
@@ -411,23 +412,16 @@ final class Client
             }
         }
 
-        $requestData = [
-            'g' => $globals['_GET'],
-            'p' => $globals['_POST'],
-            'c' => $globals['_COOKIE'],
-        ];
-
-        $requestOrder = \ini_get('request_order') ?: \ini_get('variables_order');
-        $requestOrder = preg_replace('#[^cgp]#', '', strtolower((string) $requestOrder)) ?: 'gp';
-
-        $globals['_REQUEST'] = [[]];
-        foreach (str_split($requestOrder) as $order) {
-            $globals['_REQUEST'][] = $requestData[$order];
-        }
-
-        $globals['_REQUEST'] = array_merge(...$globals['_REQUEST']);
+        // What the handler sees. The script's $_REQUEST is built again by its own PHP process, with its ini and from the
+        // $_GET, $_POST and $_COOKIE the handler leaves, unless the handler changed _REQUEST itself.
+        $request = RequestSuperglobal::build($globals['_GET'], $globals['_POST'], $globals['_COOKIE'], RequestSuperglobal::order());
+        $globals['_REQUEST'] = $request;
 
         $this->globalsHandler?->handle($globals);
+
+        if ($globals['_REQUEST'] === $request) {
+            unset($globals['_REQUEST']);
+        }
 
         return $globals;
     }

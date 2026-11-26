@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use n5s\HttpCli\Runtime\HeaderHandler;
 use n5s\HttpCli\Runtime\InputStream;
+use n5s\HttpCli\Runtime\RequestSuperglobal;
 use n5s\HttpCli\Runtime\SessionHandler;
 
 /**
@@ -40,7 +41,9 @@ use n5s\HttpCli\Runtime\SessionHandler;
     $_FILES = $httpCliClientVars['_FILES'] ?? [];
     $_SERVER = $httpCliClientVars['_SERVER'] ?? [];
     $_ENV = $httpCliClientVars['_ENV'] ?? [];
-    $_REQUEST = $httpCliClientVars['_REQUEST'] ?? [];
+    // Built from this process's ini, as PHP would, unless a globals handler set it
+    require_once __DIR__ . '/RequestSuperglobal.php';
+    $_REQUEST = $httpCliClientVars['_REQUEST'] ?? RequestSuperglobal::build($_GET, $_POST, $_COOKIE, RequestSuperglobal::order());
     $_SESSION = $httpCliClientVars['_SESSION'] ?? [];
 
     require __DIR__ . '/functions.php';

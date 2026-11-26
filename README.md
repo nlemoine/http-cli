@@ -195,7 +195,7 @@ $client = new Client(
 
 This merges the parent's `$_SERVER` and `$_ENV` arrays into the child process. It copies these arrays, not `getenv()`: when the parent runs with `variables_order=GPCS` (the value of the `php.ini` files PHP ships), its `$_ENV` only holds what code put there, a Dotenv loader or PHPUnit `<env>` for example, while `$_SERVER` holds the whole environment in CLI. Request-specific variables take precedence over inherited ones. Variables that describe a request, such as `HTTP_*`, `PHP_AUTH_*`, `HTTPS` or `REMOTE_ADDR`, are never inherited: when the parent process is itself handling a request, under PHP-FPM for example, its headers and credentials don't reach the script.
 
-You can also implement the `GlobalsHandler` interface to customize superglobals however you need:
+You can also implement the `GlobalsHandler` interface to customize superglobals however you need. The script gets the arrays as the handler leaves them. `$_REQUEST` is the exception: the script's PHP process builds it from `$_GET`, `$_POST` and `$_COOKIE` with its own `request_order`, unless the handler changes `_REQUEST` itself.
 
 ```php
 use n5s\HttpCli\GlobalsHandler;
