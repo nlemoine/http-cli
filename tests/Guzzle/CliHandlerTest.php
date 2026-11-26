@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace n5s\HttpCli\Tests\Guzzle;
 
-use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Exception\ResponseException;
 use GuzzleHttp\Promise\PromiseInterface;
@@ -15,6 +14,8 @@ use GuzzleHttp\TransferStats;
 use n5s\HttpCli\Client;
 use n5s\HttpCli\Guzzle\CliHandler;
 use n5s\HttpCli\Tests\AbstractHttpCliTestCase;
+use PHPUnit\Framework\Attributes\DataProvider;
+use Psr\Http\Client\NetworkExceptionInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 
@@ -258,6 +259,30 @@ class CliHandlerTest extends AbstractHttpCliTestCase
     }
 
     // ON_STATS Callback Tests
+    public function testOnStatsExceptionIsRethrownAfterASingleCall(): void
+    {
+        $this->createTestFile('index', '<?php echo "OK";');
+        $handler = $this->createHandler('index.php');
+
+        $calls = 0;
+        $statsError = new \RuntimeException('on_stats failed');
+        $options = [
+            RequestOptions::ON_STATS => function () use (&$calls, $statsError): void {
+                $calls++;
+                throw $statsError;
+            },
+        ];
+
+        try {
+            ($handler)(new Request('GET', 'http://localhost/'), $options)->wait();
+            $this->fail('The on_stats exception should propagate');
+        } catch (\RuntimeException $e) {
+            $this->assertSame($statsError, $e);
+        }
+
+        $this->assertSame(1, $calls);
+    }
+
     public function testOnStatsCallbackIsInvoked(): void
     {
         $this->createTestFile('index', '<?php echo "OK";');
@@ -890,6 +915,34 @@ class CliHandlerTest extends AbstractHttpCliTestCase
         $response = $promise->wait();
 
         $this->assertEquals(200, $response->getStatusCode());
+        $this->assertSame('', (string) $response->getBody());
+    }
+
+    /**
+     * @return iterable<string, array{int}>
+     */
+    public static function noBodyStatusProvider(): iterable
+    {
+        yield '204' => [204];
+        yield '304' => [304];
+    }
+
+    #[DataProvider('noBodyStatusProvider')]
+    public function testResponseWithoutBodyDoesNotTouchTheSink(int $statusCode): void
+    {
+        $this->createTestFile('index', '<?php http_response_code(' . $statusCode . '); echo "ignored";');
+        $handler = $this->createHandler('index.php');
+
+        $sinkPath = $this->tempDir . '/existing_sink.txt';
+        file_put_contents($sinkPath, 'previous content');
+
+        $response = ($handler)(new Request('GET', 'http://localhost/'), [
+            RequestOptions::SINK => $sinkPath,
+        ])->wait();
+
+        $this->assertSame($statusCode, $response->getStatusCode());
+        $this->assertSame('', (string) $response->getBody());
+        $this->assertSame('previous content', file_get_contents($sinkPath));
     }
 
     public function testHeadRequestWithHeaders(): void
@@ -1127,10 +1180,14 @@ class CliHandlerTest extends AbstractHttpCliTestCase
         $request = new Request('GET', 'http://localhost/proto.php');
         $request = $request->withProtocolVersion('2.0');
 
-        $this->expectException(ConnectException::class);
-        $this->expectExceptionMessage('HTTP/2.0 is not supported by the CLI handler');
-
-        ($handler)($request, []);
+        try {
+            ($handler)($request, []);
+            $this->fail('An unsupported protocol version should throw');
+        } catch (RequestException $e) {
+            $this->assertSame('HTTP/2.0 is not supported by the CLI handler.', $e->getMessage());
+            // Not a network failure, so retry deciders do not retry it
+            $this->assertNotInstanceOf(NetworkExceptionInterface::class, $e);
+        }
     }
 
     public function testAcceptsHttp10(): void
