@@ -37,7 +37,8 @@ class CliHandler
     {
         // Sleep if there is a delay specified.
         if (isset($options[RequestOptions::DELAY])) {
-            \usleep($options[RequestOptions::DELAY] * 1000);
+            // Guzzle documents the delay in milliseconds, as int or float
+            \usleep(\max(0, (int) \round((float) $options[RequestOptions::DELAY] * 1000)));
         }
 
         $protocolVersion = $request->getProtocolVersion();
