@@ -243,6 +243,20 @@ class CliHandlerTest extends AbstractHttpCliTestCase
         $this->assertLessThan(2000, $elapsed);
     }
 
+    public function testFloatDelayIsAccepted(): void
+    {
+        $this->createTestFile('index', '<?php echo "OK";');
+        $handler = $this->createHandler('index.php');
+
+        $startTime = microtime(true);
+        $response = ($handler)(new Request('GET', 'http://localhost/'), [
+            RequestOptions::DELAY => 50.5,
+        ])->wait();
+
+        $this->assertSame('OK', (string) $response->getBody());
+        $this->assertGreaterThanOrEqual(45, (microtime(true) - $startTime) * 1000);
+    }
+
     // ON_STATS Callback Tests
     public function testOnStatsCallbackIsInvoked(): void
     {
