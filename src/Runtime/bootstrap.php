@@ -5,6 +5,7 @@ declare(strict_types=1);
 use n5s\HttpCli\Runtime\HeaderHandler;
 use n5s\HttpCli\Runtime\InputStream;
 use n5s\HttpCli\Runtime\SessionHandler;
+use n5s\HttpCli\Runtime\UploadedFiles;
 
 /**
  * This file executes before target file to set up global variables such as $_SERVER['DOCUMENT_ROOT']
@@ -35,6 +36,11 @@ use n5s\HttpCli\Runtime\SessionHandler;
     }
 
     require __DIR__ . '/functions.php';
+
+    // Only the uploads the client wrote count as uploaded files, whatever the script later puts in $_FILES
+    /** @var array<mixed> $files */
+    $files = $httpCliClientVars['_FILES'] ?? [];
+    UploadedFiles::register($files);
 
     // Get the header handler instance (typed via getInstance())
     $headerManager = HeaderHandler::getInstance();
