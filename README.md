@@ -69,10 +69,10 @@ composer require guzzlehttp/guzzle
 ```php
 use GuzzleHttp\Client;
 use GuzzleHttp\HandlerStack;
+use n5s\HttpCli\Client as CliClient;
 use n5s\HttpCli\Guzzle\CliHandler;
-use n5s\HttpCli\Client;
 
-$cliClient = new Client('/path/to/your/app');
+$cliClient = new CliClient('/path/to/your/app');
 $handler = new CliHandler($cliClient);
 
 $client = new Client([
