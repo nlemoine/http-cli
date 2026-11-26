@@ -6,6 +6,7 @@ namespace n5s\HttpCli\Tests\Guzzle;
 
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Exception\ResponseException;
 use GuzzleHttp\Promise\PromiseInterface;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Utils;
@@ -14,6 +15,7 @@ use GuzzleHttp\TransferStats;
 use n5s\HttpCli\Client;
 use n5s\HttpCli\Guzzle\CliHandler;
 use n5s\HttpCli\Tests\AbstractHttpCliTestCase;
+use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 
 class CliHandlerTest extends AbstractHttpCliTestCase
@@ -340,6 +342,86 @@ class CliHandlerTest extends AbstractHttpCliTestCase
 
         $promise = ($handler)($request, $options);
         $promise->wait();
+    }
+
+    public function testOnHeadersReceivesTheRequest(): void
+    {
+        $this->createTestFile('index', '<?php echo "OK";');
+        $handler = $this->createHandler('index.php');
+
+        $receivedRequest = null;
+        $request = new Request('POST', 'http://localhost/path?x=1');
+        $options = [
+            RequestOptions::ON_HEADERS => function (ResponseInterface $response, RequestInterface $request) use (&$receivedRequest): void {
+                $receivedRequest = $request;
+            },
+        ];
+
+        ($handler)($request, $options)->wait();
+
+        $this->assertInstanceOf(RequestInterface::class, $receivedRequest);
+        $this->assertSame('POST', $receivedRequest->getMethod());
+        $this->assertSame('http://localhost/path?x=1', (string) $receivedRequest->getUri());
+    }
+
+    public function testOnHeadersFailureCarriesResponseAndPrevious(): void
+    {
+        $this->createTestFile('index', '<?php http_response_code(201); echo "OK";');
+        $handler = $this->createHandler('index.php');
+
+        $callbackError = new \Exception('Headers callback error');
+        $request = new Request('GET', 'http://localhost/');
+        $options = [
+            RequestOptions::ON_HEADERS => function () use ($callbackError): void {
+                throw $callbackError;
+            },
+        ];
+
+        try {
+            ($handler)($request, $options)->wait();
+            $this->fail('The promise should be rejected');
+        } catch (RequestException $e) {
+            $this->assertSame($callbackError, $e->getPrevious());
+            $this->assertSame($request, $e->getRequest());
+
+            if (class_exists(ResponseException::class)) {
+                // Guzzle 8: the response lives on ResponseException
+                $this->assertInstanceOf(ResponseException::class, $e);
+                $this->assertSame(201, $e->getResponse()->getStatusCode());
+            } else {
+                // Guzzle 7: RequestException carries the response
+                $this->assertSame(RequestException::class, $e::class);
+                $this->assertTrue($e->hasResponse());
+                $this->assertSame(201, $e->getResponse()?->getStatusCode());
+            }
+        }
+    }
+
+    public function testOnHeadersErrorRejectsAndReportsStats(): void
+    {
+        $this->createTestFile('index', '<?php echo "OK";');
+        $handler = $this->createHandler('index.php');
+
+        $stats = null;
+        $request = new Request('GET', 'http://localhost/');
+        $options = [
+            RequestOptions::ON_HEADERS => function (): void {
+                throw new \Error('Not an Exception');
+            },
+            RequestOptions::ON_STATS => function (TransferStats $transferStats) use (&$stats): void {
+                $stats = $transferStats;
+            },
+        ];
+
+        try {
+            ($handler)($request, $options)->wait();
+            $this->fail('The promise should be rejected');
+        } catch (RequestException $e) {
+            $this->assertInstanceOf(\Error::class, $e->getPrevious());
+            $this->assertInstanceOf(TransferStats::class, $stats);
+            $this->assertSame($e, $stats->getHandlerErrorData());
+            $this->assertNotNull($stats->getResponse());
+        }
     }
 
     // Authentication Tests

@@ -133,19 +133,21 @@ class CliHandler
                 '1.1', // HTTP version - CLI always simulates HTTP/1.1
                 null   // Reason phrase - let Guzzle derive from status code
             );
-        } catch (\Exception $e) {
-            return P\Create::rejectionFor(
-                new RequestException('An error was encountered while creating the response', $request, previous: $e)
-            );
+        } catch (\Throwable $e) {
+            $reason = new RequestException('An error was encountered while creating the response', $request, previous: $e);
+            $this->invokeStats($options, $request, $startTime, null, $reason);
+
+            return P\Create::rejectionFor($reason);
         }
 
         if (isset($options[RequestOptions::ON_HEADERS])) {
             try {
                 $options[RequestOptions::ON_HEADERS]($response, $request);
-            } catch (\Exception $e) {
-                return P\Create::rejectionFor(
-                    self::responseException('An error was encountered during the on_headers event', $request, $response, $e)
-                );
+            } catch (\Throwable $e) {
+                $reason = self::responseException('An error was encountered during the on_headers event', $request, $response, $e);
+                $this->invokeStats($options, $request, $startTime, $response, $reason);
+
+                return P\Create::rejectionFor($reason);
             }
         }
 
