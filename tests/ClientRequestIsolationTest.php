@@ -63,7 +63,10 @@ final class ClientRequestIsolationTest extends AbstractHttpCliTestCase
             $keys = ["HTTP_AUTHORIZATION", "HTTP_COOKIE", "PHP_AUTH_USER", "PHP_AUTH_PW", "HTTPS", "REMOTE_USER", "REDIRECT_HTTP_AUTHORIZATION", "N5S_TEST_APP_ENV"];
             echo json_encode([
                 "server" => array_map(fn (string $key) => $_SERVER[$key] ?? null, array_combine($keys, $keys)),
-                "env" => $_ENV["HTTP_X_FORWARDED_FOR"] ?? null,
+                "env" => [
+                    "HTTP_X_FORWARDED_FOR" => $_ENV["HTTP_X_FORWARDED_FOR"] ?? null,
+                    "N5S_TEST_ENV_VAR" => $_ENV["N5S_TEST_ENV_VAR"] ?? null,
+                ],
             ]);
         ');
 
@@ -82,6 +85,7 @@ final class ClientRequestIsolationTest extends AbstractHttpCliTestCase
         $previousEnv = $_ENV;
         $_SERVER = $parentServer + $_SERVER;
         $_ENV['HTTP_X_FORWARDED_FOR'] = '203.0.113.7';
+        $_ENV['N5S_TEST_ENV_VAR'] = 'inherited';
 
         try {
             $response = (new Client($this->testDocumentRoot, globalsHandler: new InheritEnvGlobalsHandler()))
@@ -103,7 +107,10 @@ final class ClientRequestIsolationTest extends AbstractHttpCliTestCase
                 // Environment variables are still inherited
                 'N5S_TEST_APP_ENV' => 'testing',
             ],
-            'env' => null,
+            'env' => [
+                'HTTP_X_FORWARDED_FOR' => null,
+                'N5S_TEST_ENV_VAR' => 'inherited',
+            ],
         ], json_decode($response->getContent(), true));
     }
 

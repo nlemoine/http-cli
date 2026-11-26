@@ -30,9 +30,18 @@ use n5s\HttpCli\Runtime\SessionHandler;
     InputStream::setRawInput($rawInput);
     unset($httpCliClientVars['_RAW_INPUT']);
 
-    foreach ($httpCliClientVars as $globalName => $variables) {
-        $GLOBALS[$globalName] = $variables;
-    }
+    // Assigned by name, never through $GLOBALS. With auto_globals_jit (on by default), PHP builds $_ENV, $_SERVER
+    // and $_REQUEST the first time a file that names them is compiled, or when filter_input() needs them, and would
+    // replace values set through $GLOBALS. Naming them here builds them while this file compiles, before the values
+    // below are set. $_ENV is exactly what the client sent, whatever variables_order the PHP process uses.
+    $_GET = $httpCliClientVars['_GET'] ?? [];
+    $_POST = $httpCliClientVars['_POST'] ?? [];
+    $_COOKIE = $httpCliClientVars['_COOKIE'] ?? [];
+    $_FILES = $httpCliClientVars['_FILES'] ?? [];
+    $_SERVER = $httpCliClientVars['_SERVER'] ?? [];
+    $_ENV = $httpCliClientVars['_ENV'] ?? [];
+    $_REQUEST = $httpCliClientVars['_REQUEST'] ?? [];
+    $_SESSION = $httpCliClientVars['_SESSION'] ?? [];
 
     require __DIR__ . '/functions.php';
 

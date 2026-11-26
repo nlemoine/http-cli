@@ -375,7 +375,7 @@ final class Client
      *
      * @param array<string, mixed> $sessionData Session data to populate $_SESSION
      * @return array{
-     *     _ENV: array<string, string>,
+     *     _ENV: array<string, mixed>,
      *     _GET: array<string, mixed>,
      *     _POST: array<string, mixed>,
      *     _COOKIE: array<string, string>,

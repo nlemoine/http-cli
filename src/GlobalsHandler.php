@@ -9,6 +9,10 @@ interface GlobalsHandler
     /**
      * Customize the superglobals array before it's sent to the child process.
      *
+     * The script gets these arrays as they are left here, whatever the ini of
+     * the PHP process that runs it. _ENV starts empty: the environment of the
+     * PHP process is only readable with getenv().
+     *
      * @param array{
      *     _ENV: array<string, mixed>,
      *     _GET: array<string, mixed>,
