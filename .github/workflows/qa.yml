@@ -17,5 +17,6 @@ jobs:
     uses: nlemoine/.github/.github/workflows/php-qa.yml@d6574f76ad2cc59d03db7a24a3ce7f093c6df86a
     with:
       cs-tool: ecs
+      run-infection: true
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
