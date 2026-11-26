@@ -306,7 +306,7 @@ Running PHP scripts via CLI instead of a web server comes with inherent limitati
 - **Script resolution**: A URL path ending in `.php` runs that file from the document root, and any other path runs `file`. The script must be a file inside the document root, symbolic links included. Otherwise, or if it doesn't exist, the client returns a `404` without starting PHP, and `getProcess()` returns a process that was never started.
 - **Performance**: Process spawning overhead, but no DNS resolution, TCP/SSL handshake, or network latency
 - **`$_SERVER` values**: Some values like `SERVER_SOFTWARE` will differ from Apache/nginx
-- **File uploads**: Multipart parts are written to temp files and populated in `$_FILES`
+- **File uploads**: Multipart parts with a `filename` are written to temp files and populated in `$_FILES`. `is_uploaded_file()` and `move_uploaded_file()` accept these files, and only these, so frameworks can handle them as usual. A part name such as `files[]` is not expanded into nested arrays as a web server would.
 - **Session handling**: Works but uses an in-memory handler, not file-based persistence
 - **`php://input`**: Custom stream wrapper provides the request body
 - **`filter_input()`**: `filter_input()`, `filter_input_array()` and `filter_has_var()` read what the PHP CLI process itself received, not the superglobals the library sets. They find nothing for `INPUT_GET`, `INPUT_POST` and `INPUT_COOKIE`, the process environment for `INPUT_ENV` when `variables_order` contains `E`, and the CLI's own values for `INPUT_SERVER`. Read the superglobals instead.

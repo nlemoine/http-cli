@@ -207,179 +207,208 @@ class ClientRequestTest extends AbstractHttpCliTestCase
 
     public function testRequestWithSingleFileUpload(): void
     {
-        // Create a PHP file that echoes uploaded file info
-        $uploadFile = $this->testDocumentRoot . '/upload.php';
-        file_put_contents($uploadFile, '<?php
-            if (isset($_FILES["document"])) {
-                $file = $_FILES["document"];
-                echo json_encode([
-                    "name" => $file["name"],
-                    "type" => $file["type"],
-                    "size" => $file["size"],
-                    "error" => $file["error"],
-                    "tmp_exists" => file_exists($file["tmp_name"]),
-                ]);
-            } else {
-                echo json_encode(["error" => "No file uploaded"]);
-            }
-        ?>');
+        $this->createTestFile('upload', '<?php
+            $file = $_FILES["document"];
+            echo json_encode([
+                "name" => $file["name"],
+                "full_path" => $file["full_path"],
+                "type" => $file["type"],
+                "size" => $file["size"],
+                "error" => $file["error"],
+                "contents" => file_get_contents($file["tmp_name"]),
+            ]);
+        ');
 
-        $client = new Client($this->testDocumentRoot);
+        $options = (new RequestOptionsBuilder())
+            ->multipart([
+                [
+                    'name' => 'document',
+                    'contents' => 'Hello, this is file content!',
+                    'filename' => 'test.txt',
+                ],
+            ])
+            ->build();
 
-        try {
-            $options = (new RequestOptionsBuilder())
-                ->multipart([
-                    [
-                        'name' => 'document',
-                        'contents' => 'Hello, this is file content!',
-                        'filename' => 'test.txt',
-                    ],
-                ])
-                ->build();
+        $response = (new Client($this->testDocumentRoot))->request('POST', 'http://localhost/upload.php', $options);
 
-            $response = $client->request('POST', 'http://localhost/upload.php', $options);
-
-            $this->assertInstanceOf(Response::class, $response);
-            $content = $response->getContent();
-            $data = json_decode($content, true);
-
-            if (is_array($data) && isset($data['name'])) {
-                $this->assertSame('test.txt', $data['name']);
-                $this->assertSame(UPLOAD_ERR_OK, $data['error']);
-                $this->assertSame(28, $data['size']); // Length of "Hello, this is file content!"
-                $this->assertTrue($data['tmp_exists']);
-            }
-        } catch (Exception $e) {
-            // Expected in test environment
-            $this->assertInstanceOf(Exception::class, $e);
-        }
+        $this->assertSame([
+            'name' => 'test.txt',
+            'full_path' => 'test.txt',
+            'type' => 'text/plain',
+            'size' => 28,
+            'error' => UPLOAD_ERR_OK,
+            'contents' => 'Hello, this is file content!',
+        ], json_decode($response->getContent(), true));
     }
 
     public function testRequestWithMultipleFileUploads(): void
     {
-        $uploadFile = $this->testDocumentRoot . '/multi-upload.php';
-        file_put_contents($uploadFile, '<?php
-            $files = [];
-            foreach ($_FILES as $name => $file) {
-                $files[$name] = [
-                    "name" => $file["name"],
-                    "size" => $file["size"],
-                    "error" => $file["error"],
-                ];
-            }
-            echo json_encode($files);
-        ?>');
+        $this->createTestFile('multi-upload', '<?php
+            echo json_encode(array_map(
+                fn (array $file) => [$file["name"], file_get_contents($file["tmp_name"])],
+                $_FILES
+            ));
+        ');
 
-        $client = new Client($this->testDocumentRoot);
+        $options = (new RequestOptionsBuilder())
+            ->multipart([
+                [
+                    'name' => 'file1',
+                    'contents' => 'First file content',
+                    'filename' => 'first.txt',
+                ],
+                [
+                    'name' => 'file2',
+                    'contents' => 'Second file content',
+                    'filename' => 'second.txt',
+                ],
+            ])
+            ->build();
 
-        try {
-            $options = (new RequestOptionsBuilder())
-                ->multipart([
-                    [
-                        'name' => 'file1',
-                        'contents' => 'First file content',
-                        'filename' => 'first.txt',
-                    ],
-                    [
-                        'name' => 'file2',
-                        'contents' => 'Second file content',
-                        'filename' => 'second.txt',
-                    ],
-                ])
-                ->build();
+        $response = (new Client($this->testDocumentRoot))->request('POST', 'http://localhost/multi-upload.php', $options);
 
-            $response = $client->request('POST', 'http://localhost/multi-upload.php', $options);
-            $data = json_decode($response->getContent(), true);
-
-            if (is_array($data) && isset($data['file1'], $data['file2'])) {
-                $this->assertSame('first.txt', $data['file1']['name']);
-                $this->assertSame('second.txt', $data['file2']['name']);
-            }
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-        }
+        $this->assertSame([
+            'file1' => ['first.txt', 'First file content'],
+            'file2' => ['second.txt', 'Second file content'],
+        ], json_decode($response->getContent(), true));
     }
 
     public function testRequestWithMixedMultipartData(): void
     {
-        $uploadFile = $this->testDocumentRoot . '/mixed-upload.php';
-        file_put_contents($uploadFile, '<?php
+        $this->createTestFile('mixed-upload', '<?php
             echo json_encode([
                 "post" => $_POST,
-                "files" => array_map(fn($f) => $f["name"], $_FILES),
+                "files" => array_map(fn (array $file) => $file["name"], $_FILES),
             ]);
-        ?>');
+        ');
 
-        $client = new Client($this->testDocumentRoot);
+        $options = (new RequestOptionsBuilder())
+            ->multipart([
+                [
+                    'name' => 'title',
+                    'contents' => 'My Document',
+                ],
+                [
+                    'name' => 'description',
+                    'contents' => 'A test document',
+                ],
+                [
+                    'name' => 'attachment',
+                    'contents' => 'File contents here',
+                    'filename' => 'document.pdf',
+                ],
+            ])
+            ->build();
 
-        try {
-            $options = (new RequestOptionsBuilder())
-                ->multipart([
-                    [
-                        'name' => 'title',
-                        'contents' => 'My Document',
-                    ],
-                    [
-                        'name' => 'description',
-                        'contents' => 'A test document',
-                    ],
-                    [
-                        'name' => 'attachment',
-                        'contents' => 'File contents here',
-                        'filename' => 'document.pdf',
-                    ],
-                ])
-                ->build();
+        $response = (new Client($this->testDocumentRoot))->request('POST', 'http://localhost/mixed-upload.php', $options);
 
-            $response = $client->request('POST', 'http://localhost/mixed-upload.php', $options);
-            $data = json_decode($response->getContent(), true);
-
-            if (is_array($data)) {
-                // Regular fields should be in $_POST
-                $this->assertSame('My Document', $data['post']['title'] ?? null);
-                $this->assertSame('A test document', $data['post']['description'] ?? null);
-                // File should be in $_FILES
-                $this->assertSame('document.pdf', $data['files']['attachment'] ?? null);
-            }
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-        }
+        $this->assertSame([
+            'post' => [
+                'title' => 'My Document',
+                'description' => 'A test document',
+            ],
+            'files' => [
+                'attachment' => 'document.pdf',
+            ],
+        ], json_decode($response->getContent(), true));
     }
 
     public function testRequestWithFileUploadMimeType(): void
     {
-        $uploadFile = $this->testDocumentRoot . '/mime-upload.php';
-        file_put_contents($uploadFile, '<?php
-            if (isset($_FILES["image"])) {
-                echo $_FILES["image"]["type"];
-            }
-        ?>');
+        $this->createTestFile('mime-upload', '<?php echo $_FILES["image"]["type"];');
 
-        $client = new Client($this->testDocumentRoot);
-
-        try {
-            $options = (new RequestOptionsBuilder())
-                ->multipart([
-                    [
-                        'name' => 'image',
-                        'contents' => 'fake image data',
-                        'filename' => 'photo.jpg',
-                        'headers' => [
-                            'Content-Type' => 'image/jpeg',
-                        ],
+        $options = (new RequestOptionsBuilder())
+            ->multipart([
+                [
+                    'name' => 'image',
+                    'contents' => 'fake image data',
+                    'filename' => 'photo.jpg',
+                    'headers' => [
+                        'Content-Type' => 'image/jpeg',
                     ],
-                ])
-                ->build();
+                ],
+            ])
+            ->build();
 
-            $response = $client->request('POST', 'http://localhost/mime-upload.php', $options);
-            $content = trim($response->getContent());
+        $response = (new Client($this->testDocumentRoot))->request('POST', 'http://localhost/mime-upload.php', $options);
 
-            // The MIME type should be what we specified
-            if (! empty($content) && ! str_contains($content, 'error')) {
-                $this->assertSame('image/jpeg', $content);
-            }
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-        }
+        $this->assertSame('image/jpeg', $response->getContent());
+    }
+
+    public function testFileUploadMimeTypeIsDetectedFromContents(): void
+    {
+        $this->createTestFile('mime-upload', '<?php echo $_FILES["image"]["type"];');
+
+        // A PNG signature and IHDR chunk, without a Content-Type header
+        $png = "\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde";
+        $options = (new RequestOptionsBuilder())
+            ->multipart([
+                [
+                    'name' => 'image',
+                    'contents' => $png,
+                    'filename' => 'pixel.png',
+                ],
+            ])
+            ->build();
+
+        $response = (new Client($this->testDocumentRoot))->request('POST', 'http://localhost/mime-upload.php', $options);
+
+        $this->assertSame('image/png', $response->getContent());
+    }
+
+    public function testUploadedFileCanBeMovedWithMoveUploadedFile(): void
+    {
+        $destination = $this->tempDir . '/moved.txt';
+        $this->createTestFile('move-upload', '<?php
+            $file = $_FILES["document"];
+            echo json_encode([
+                "is_uploaded" => is_uploaded_file($file["tmp_name"]),
+                "moved" => move_uploaded_file($file["tmp_name"], $_POST["destination"]),
+                "moved_again" => move_uploaded_file($file["tmp_name"], $_POST["destination"] . ".2"),
+            ]);
+        ');
+
+        $options = (new RequestOptionsBuilder())
+            ->multipart([
+                [
+                    'name' => 'destination',
+                    'contents' => $destination,
+                ],
+                [
+                    'name' => 'document',
+                    'contents' => 'Uploaded content',
+                    'filename' => 'test.txt',
+                ],
+            ])
+            ->build();
+
+        $response = (new Client($this->testDocumentRoot))->request('POST', 'http://localhost/move-upload.php', $options);
+
+        $this->assertSame([
+            'is_uploaded' => true,
+            'moved' => true,
+            'moved_again' => false,
+        ], json_decode($response->getContent(), true));
+        $this->assertSame('Uploaded content', file_get_contents($destination));
+    }
+
+    public function testOnlyRequestUploadsCountAsUploadedFiles(): void
+    {
+        $this->createTestFile('not-upload', '<?php
+            $target = __DIR__ . "/copy.php";
+            echo json_encode([
+                "is_uploaded" => is_uploaded_file(__FILE__),
+                "moved" => move_uploaded_file(__FILE__, $target),
+                "still_there" => file_exists(__FILE__),
+            ]);
+        ');
+
+        $response = (new Client($this->testDocumentRoot))->request('POST', 'http://localhost/not-upload.php');
+
+        $this->assertSame([
+            'is_uploaded' => false,
+            'moved' => false,
+            'still_there' => true,
+        ], json_decode($response->getContent(), true));
     }
 }

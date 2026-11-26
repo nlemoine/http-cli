@@ -24,6 +24,8 @@ final class Client
         'headers_sent',
         'http_response_code',
         'php_sapi_name',
+        'is_uploaded_file',
+        'move_uploaded_file',
     ];
 
     private readonly string $documentRoot;
@@ -397,7 +399,7 @@ final class Client
             '_GET' => $request->query->all(),
             '_POST' => $request->request->all(),
             '_COOKIE' => $request->cookies->all(),
-            '_FILES' => $request->files->all(),
+            '_FILES' => self::toPhpFiles($request->files->all()),
             '_SESSION' => $sessionData,
             '_SERVER' => $request->server->all(),
             '_RAW_INPUT' => $request->getContent(), // For php://input simulation
@@ -425,6 +427,34 @@ final class Client
         }
 
         return $globals;
+    }
+
+    /**
+     * Turn the request's UploadedFile objects into the array $_FILES holds
+     * under a web server. The objects can't be serialized for the child
+     * process, and the script expects the native shape anyway.
+     *
+     * @param array<string, mixed> $files
+     * @return array<string, mixed>
+     */
+    private static function toPhpFiles(array $files): array
+    {
+        $phpFiles = [];
+
+        foreach ($files as $name => $file) {
+            if ($file instanceof UploadedFile) {
+                $phpFiles[$name] = [
+                    'name' => $file->getClientOriginalName(),
+                    'full_path' => $file->getClientOriginalPath(),
+                    'type' => $file->getClientMimeType(),
+                    'tmp_name' => $file->getPathname(),
+                    'error' => $file->getError(),
+                    'size' => (int) $file->getSize(),
+                ];
+            }
+        }
+
+        return $phpFiles;
     }
 
     /**

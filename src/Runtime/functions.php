@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use n5s\HttpCli\Runtime\HeaderHandler;
+use n5s\HttpCli\Runtime\UploadedFiles;
 
 /**
  * Global function wrappers for CLI environment.
@@ -13,6 +14,7 @@ use n5s\HttpCli\Runtime\HeaderHandler;
  */
 
 require_once __DIR__ . '/HeaderHandler.php';
+require_once __DIR__ . '/UploadedFiles.php';
 
 // Initialize the singleton instance
 new HeaderHandler();
@@ -57,5 +59,19 @@ if (! function_exists('php_sapi_name')) {
     function php_sapi_name(): string
     {
         return 'cgi-fcgi';
+    }
+}
+
+if (! function_exists('is_uploaded_file')) {
+    function is_uploaded_file(string $filename): bool
+    {
+        return UploadedFiles::isUploaded($filename);
+    }
+}
+
+if (! function_exists('move_uploaded_file')) {
+    function move_uploaded_file(string $from, string $to): bool
+    {
+        return UploadedFiles::move($from, $to);
     }
 }
